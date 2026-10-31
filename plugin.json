@@ -1,0 +1,65 @@
+{
+  "manifestVersion": 2,
+  "name": "codex-candy-eval",
+  "publisher": "cloudops",
+  "displayName": "Codex 账号测试",
+  "version": "1.0.0",
+  "description": "糖果题、模型指纹和画鹈鹕测试",
+  "license": "MIT",
+  "engines": {
+    "codex-proxy-rs": ">=3.35.1, <3.36.0"
+  },
+  "main": "bin/plugin",
+  "runtime": "trustedProcess",
+  "contributes": {
+    "management": {
+      "version": 2
+    }
+  },
+  "configurationSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "resources": {
+    "web/index.html": "text/html",
+    "web/app.js": "text/javascript",
+    "web/app.css": "text/css",
+    "data/unified_bank.json": "application/json",
+    "data/shared_detector.bin": "application/octet-stream",
+    "LICENSE": "text/plain",
+    "vendor/SOURCES.json": "application/json",
+    "licenses/candy-eval.txt": "text/plain",
+    "licenses/codex-proxy-ui.txt": "text/plain",
+    "licenses/dompurify.txt": "text/plain",
+    "licenses/gateway-plugin-sdk.txt": "text/plain",
+    "licenses/lm-detector.txt": "text/plain",
+    "licenses/vue.txt": "text/plain"
+  },
+  "state": [
+    {
+      "namespace": "history",
+      "schemaVersion": 1,
+      "schema": {
+        "type": "object",
+        "required": [
+          "records"
+        ],
+        "properties": {
+          "records": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "maximumRecords": 1,
+      "maximumBytes": 262144,
+      "maximumValueBytes": 262144,
+      "migratesFrom": []
+    }
+  ]
+}

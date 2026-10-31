@@ -1,0 +1,26 @@
+[package]
+name = "cpr-candy-eval"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.99.1"
+license = "MIT"
+publish = false
+
+[dependencies]
+getrandom = "0.4.3"
+gateway-plugin-sdk = { path = "../vendor/gateway-plugin-sdk", features = ["io"] }
+lmfpd = { path = "../vendor/lmfpd" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+tokio = { version = "1.52.3", features = ["io-std", "macros", "rt", "sync", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1.52.3", features = ["io-util", "process", "test-util"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1

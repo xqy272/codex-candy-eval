@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.png binary
+*.bin binary
+*.tar.gz binary
+vendor/** -text -whitespace
+data/** -text
+backend/tests/fixtures/** -text -whitespace

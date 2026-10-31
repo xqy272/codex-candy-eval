@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "host": {
+    "timezone": "Asia/Shanghai",
+    "listen": {"host":"127.0.0.1","port":18380},
+    "runtime_data_dir": "../data",
+    "logging": {
+      "level":"info", "stdout":true, "oauth_recovery":false,
+      "request_dump":false, "request_dump_retention_days":1,
+      "file":{"enabled":false,"directory":"../logs","retention_days":7,"max_file_size_mb":20}
+    },
+    "worker_shutdown_timeout_seconds":30
+  },
+  "store": {
+    "database":{"url":"postgres://cpr_eval@127.0.0.1:15432/cpr_eval","password":""},
+    "redis":{"url":"redis://127.0.0.1:16379/","password":""}
+  },
+  "admin":{"session_ttl_minutes":10080,"session_absolute_ttl_minutes":43200,"default_username":"eval-admin","default_password":""},
+  "client":{"session_ttl_minutes":1440},
+  "api":{"asset_directory":"","cors_allowed_origins":[],"request_timeout_seconds":null,"request_id_header":"x-request-id"},
+  "openai":{"residency":null,"account_routing_override":null}
+}
