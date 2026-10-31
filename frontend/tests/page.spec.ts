@@ -7,7 +7,7 @@ const asset = (name: string, type: string) => `data:${type};base64,${readFileSyn
 const csp = "default-src 'none'; script-src 'unsafe-inline' data:; style-src 'unsafe-inline' data:; img-src data:; font-src data:; media-src data:; connect-src 'none'; worker-src 'none'; child-src 'none'; frame-src 'none'; object-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'"
 const assembled = readFileSync(new URL('../dist/index.html', import.meta.url), 'utf8').replace('<head>', `<head><meta http-equiv="Content-Security-Policy" content="${csp}">`).replace('./app.js', asset('app.js', 'text/javascript')).replace('./app.css', asset('app.css', 'text/css'))
 
-async function mock(page: Page, options: { empty?: boolean; error?: boolean; dark?: boolean; slow?: boolean } = {}) {
+async function mock(page: Page, options: { empty?: boolean; error?: boolean; dark?: boolean; slow?: boolean; summaries?: boolean } = {}) {
   await page.route('http://127.0.0.1:4173/', route => route.fulfill({ contentType: 'text/html', body: assembled }))
   const resolved = resolveTheme(options.dark ? 'dark' : 'light', DEFAULT_THEME_COLOR, DEFAULT_CUSTOM_THEME_COLOR)
   await page.addInitScript(({ options, resolved }) => {
@@ -23,14 +23,16 @@ async function mock(page: Page, options: { empty?: boolean; error?: boolean; dar
         if (options.error) return { ...encode({ error: { message: '模拟宿主读取失败' } }), status: 502 }
         if (input.path === 'api/snapshot') return encode({ accounts: options.empty ? [] : [{ account_id: 'a1', name: '测试账号 A', email: 'a@example.invalid', enabled: true }, { account_id: 'a2', name: '测试账号 B', email: null, enabled: false }], keys: options.empty ? [] : [{ id: 'k1', name: '测试 Key', enabled: true }], detectorVersion: 'fixture' })
         if (input.path === 'api/models') return encode({ models: ['gpt-test'] })
-        if (input.path === 'api/history') return encode({ records: [...saved.values()] })
+        if (input.path === 'api/history') return encode({ records: [...saved.values()].map(r=>options.summaries ? {...r,samples:[],summaryOnly:true} : r) })
+        if(input.path === 'api/detail') return encode({record:saved.get(data.id) ?? null})
+        if (input.path === 'api/clear') { for (const [id,r] of saved) if ((!data.account_id || r.accountId === data.account_id) && (!data.kind || r.kind === data.kind)) saved.delete(id); return encode({cleared:true}) }
         if (input.path === 'api/cancel') { finish?.('cancelled'); return encode({ cancelled: true }) }
         if (input.path === 'api/run') {
           const state = options.slow ? await new Promise(resolve => { finish = resolve }) : 'completed'
           const text = data.kind === 'pelican' ? '<style>body{background:#eef5ff}</style><svg width="300" height="180"><text x="20" y="80">Pelican fixture</text></svg><script>parent.__unsafe = true;fetch("https://example.invalid/leak")</script><img src="https://example.invalid/leak" onerror="parent.__unsafe=true"><a href="https://example.invalid/">unsafe link</a>' : '21'
           const nextStep = data.kind === 'fingerprint' && data.step < 2 && state !== 'cancelled' ? data.step + 1 : null
           const sample = { status: state, prompt: '固定测试题目', instructions: '', requestId: 'mock-request', durationMs: 1250, answer: { text, usage: {} } }
-          const record = { ...data, status: state === 'cancelled' ? 'cancelled' : nextStep !== null ? 'partial' : data.kind === 'candy' ? 'correct' : 'completed', startedAt: Date.now(), durationMs: 1250, detectorVersion: 'fixture', samples: [...(saved.get(data.id)?.samples ?? []), sample], attribution: data.kind === 'fingerprint' && nextStep === null ? { prediction_name: '参考候选 A', results: [{ display_name: '参考候选 A', score: 1.2345, probability: 0.8 }] } : null }
+          const record = { ...data, requestProfile: data.profile, status: state === 'cancelled' ? 'cancelled' : nextStep !== null ? 'partial' : data.kind === 'candy' ? 'correct' : 'completed', startedAt: Date.now(), durationMs: 1250, detectorVersion: 'fixture', samples: [...(saved.get(data.id)?.samples ?? []), sample], attribution: data.kind === 'fingerprint' && nextStep === null ? { prediction_name: '参考候选 A', results: [{ display_name: '参考候选 A', score: 1.2345, probability: 0.8 }] } : null }
           saved.set(data.id, record)
           return encode({ persisted: true, nextStep, record })
         }
@@ -104,4 +106,29 @@ test('pelican preview cannot execute or load external assets', async ({ page }, 
   expect(await page.evaluate(() => (window as any).__unsafe)).toBeUndefined()
   expect(outbound).toHaveLength(0)
   await page.screenshot({ path: info.outputPath('pelican.png'), fullPage: true })
+})
+
+test('profile-scoped stats and explicit history clearing', async ({ page }) => {
+  await mock(page); await page.goto('/')
+  await page.getByRole('button', {name:'测试',exact:true}).first().click()
+  await expect(page.getByText('1/1 · 失败 0',{exact:true})).toBeVisible()
+  const calls=await page.evaluate(() => (window as any).__requests)
+  expect(calls.find((v:any)=>v.path==='api/run').data.profile).toBe('codex-context-v1')
+  await page.getByRole('button',{name:'清理筛选历史'}).click()
+  await expect(page.getByText('答对',{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'确认清理',exact:true}).click()
+  await expect(page.getByText('暂无测试记录',{exact:true})).toBeVisible()
+  await expect(page.getByRole('row').filter({hasText:'测试账号 A'}).getByText('0/0 · 失败 0',{exact:true})).toBeVisible()
+})
+
+test('summary history reload lazily restores full details and export', async ({page}) => {
+  await mock(page,{summaries:true});await page.goto('/')
+  await page.getByRole('button',{name:'测试',exact:true}).first().click()
+  await expect(page.getByText('答对',{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'刷新',exact:true}).click()
+  await expect(page.getByText('正在读取详情',{exact:true})).toHaveCount(0)
+  await page.getByRole('button',{name:'JSON 导出'}).click()
+  await expect(page.getByLabel('测试记录 JSON，选中后复制')).toHaveValue(/mock-request/)
+  const calls=await page.evaluate(()=>(window as any).__requests)
+  expect(calls.some((r:any)=>r.path==='api/detail')).toBe(true)
 })

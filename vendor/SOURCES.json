@@ -118,6 +118,13 @@
     "vendor/lmfpd/src/ranker.rs": "d23f246f65d571d27e000187081a8adef18f35e48519963ed2d9226fb87f0c6a",
     "vendor/lmfpd/src/request.rs": "91c6899d037c14a47818aa37bd514274b11b8ded16e005a0660b5493a78104d1",
     "vendor/lmfpd/src/sample.rs": "34a7f0092fafc7af9afb4a1ed54cde80021790c7f21161a9f8adf62c4b3f089a",
-    "vendor/lmfpd/src/templates.json": "b3af91a3f889a534638308221cc3db3cada36f68395fdc75ed71a9571ac2c5df"
+    "vendor/lmfpd/src/templates.json": "b3af91a3f889a534638308221cc3db3cada36f68395fdc75ed71a9571ac2c5df",
+    "data/codex-context.json": "65f976b3a7cb410e50312e5b4096686e5b1fda3e4fa1942ee3974d7cb1e7cd42"
+  },
+  "requestContext": {
+    "repository": "https://github.com/haowang02/cpa-plugin-codex-candy-eval",
+    "commit": "179d6dae48a0f0a735637ea2f373345b91caaca8",
+    "path": "internal/plugin/data/codex_context.json",
+    "adaptation": "Responses instructions/messages/tools; tool_choice none; host owns identity and wire encoding"
   }
 }

@@ -22,6 +22,9 @@ result=execute(request('candy','eval-candy',account=b,key=key['id']))
 assert result['record']['status']=='correct'
 detail=c.api('/api/admin/usage/records/detail?id='+result['record']['samples'][0]['requestId'])
 assert detail['accountId']==b and detail['clientApiKeyId']==key['id']
+for _ in range(50):
+ if detail['logicalOutcome']!='running':break
+ time.sleep(.1);detail=c.api('/api/admin/usage/records/detail?id='+result['record']['samples'][0]['requestId'])
 assert detail['logicalOutcome']=='succeeded',detail['logicalOutcome']
 for _ in range(30):
  if detail['attemptsComplete']:break
@@ -55,7 +58,7 @@ if state['baselineSha256']!=state['artifactSha256']:
  assert before_ids=={r['id']for r in c.route('api/history')[1]['records']}
  ok('Version rollback and return retain compatible private state')
 for n in range(21):assert execute(request('candy','eval-candy'))['persisted']
-history=c.route('api/history')[1]['records'];assert len(history)==20 and len({r['id']for r in history})==20
+history=c.route('api/history')[1]['records'];group=[r for r in history if r['accountId']==state['accounts'][0]['account_id'] and r['kind']=='candy'];assert len(group)==20 and len({r['id']for r in history})==len(history) and len(history)<=200
 ok('History retention bound and unique record replacement under repeated use')
 (WORK/'lifecycle-report.json').write_text(json.dumps({'checks':checks},ensure_ascii=False,indent=2))
 print('All lifecycle and access checks passed',flush=True)

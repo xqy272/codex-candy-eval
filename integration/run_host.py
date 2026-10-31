@@ -30,7 +30,7 @@ def run(args,as_nobody=False):
     if p.returncode:raise RuntimeError(p.stderr.decode(errors='replace')[-1500:])
     return p.stdout
 def wait_url(url):
-    for _ in range(120):
+    for _ in range(480):
         if 'app' in globals() and app.poll() is not None:raise RuntimeError('CPR host exited during startup')
         try:
             if urllib.request.build_opener(urllib.request.ProxyHandler({})).open(url,timeout=1).status<300:return
@@ -111,12 +111,12 @@ try:
     control={'root':str(RUNTIME),'username':'eval-admin','password':password,'base':'http://127.0.0.1:18380'}
     (WORK/'control.json').write_text(json.dumps(control));(WORK/'control.json').chmod(0o600)
     control_written=True
-    print('CPR v3.35.1 isolated host ready on 127.0.0.1:18380',flush=True)
+    print('CPR v3.36.0 isolated host ready on 127.0.0.1:18380',flush=True)
     for _ in range(3600):
         if (WORK/'stop').exists():break
         if app.poll() is not None:raise RuntimeError('CPR host exited')
         temporary=WORK/'upstream-observations.tmp'
-        temporary.write_text(json.dumps({'models':[c['model']for c in Mock.calls],'closed':Mock.closed}))
+        temporary.write_text(json.dumps({'models':[c['model']for c in Mock.calls],'closed':Mock.closed,'request_facts':[{'model':c['model'],'instructions_chars':len(c['body'].get('instructions','')),'input_items':len(c['body'].get('input',[])),'tools':len(c['body'].get('tools',[])),'tool_choice':c['body'].get('tool_choice')}for c in Mock.calls]}))
         temporary.replace(WORK/'upstream-observations.json')
         time.sleep(1)
 finally:

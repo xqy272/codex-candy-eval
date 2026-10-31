@@ -45,43 +45,146 @@ pub async fn load(host: &HostClient) -> Result<StateGetResult, PluginFault> {
 }
 pub async fn find(host: &HostClient, id: &str) -> Result<Option<Value>, PluginFault> {
     let saved = load(host).await?;
-    match saved.record {
-        Some(r) if r.schema_version == 1 => Ok(r
-            .value
-            .get("records")
-            .and_then(Value::as_array)
-            .ok_or_else(invalid)?
-            .iter()
-            .find(|r| r["id"] == id)
-            .cloned()),
-        Some(_) => Err(invalid()),
-        None => Ok(None),
+    let indexed = saved
+        .record
+        .as_ref()
+        .and_then(|r| r.value["records"].as_array())
+        .and_then(|rows| rows.iter().find(|r| r["id"] == id));
+    if let Some(record) = indexed
+        && record["summaryOnly"] != true
+    {
+        return Ok(Some(record.clone()));
     }
+    // 先查详情也覆盖详情已提交而索引尚未提交的中断窗口
+    let detail: (StateGetResult, _) = callback(
+        host,
+        "host.state.get",
+        StateGetRequest {
+            namespace: "details".into(),
+            key: id.into(),
+        },
+        vec![],
+    )
+    .await?;
+    Ok(detail.0.record.map(|r| r.value["record"].clone()))
+}
+
+pub async fn remove_details(host: &HostClient, rows: &[Value]) -> Result<(), PluginFault> {
+    for row in rows {
+        if row["summaryOnly"] != true {
+            continue;
+        }
+        let id = row["id"].as_str().ok_or_else(invalid)?;
+        let (saved, _): (StateGetResult, _) = callback(
+            host,
+            "host.state.get",
+            StateGetRequest {
+                namespace: "details".into(),
+                key: id.into(),
+            },
+            vec![],
+        )
+        .await?;
+        if let Some(record) = saved.record {
+            let _: (gateway_plugin_sdk::call::host::StateDeleteResult, _) = callback(
+                host,
+                "host.state.delete",
+                gateway_plugin_sdk::call::host::StateDeleteRequest {
+                    namespace: "details".into(),
+                    key: id.into(),
+                    expected_version: record.version,
+                },
+                vec![],
+            )
+            .await?;
+        }
+    }
+    Ok(())
 }
 
 pub async fn append(host: &HostClient, record: Value) -> Result<(), PluginFault> {
     let previous = load(host).await?;
     let version = previous.record.as_ref().map(|r| r.version);
-    let mut records = match previous.record {
-        Some(r) if r.schema_version == 1 => r
-            .value
-            .get("records")
-            .and_then(Value::as_array)
-            .cloned()
-            .ok_or_else(invalid)?,
-        Some(_) => return Err(invalid()),
-        None => vec![],
-    };
-    records.retain(|r| r["id"] != record["id"]);
-    records.insert(0, record);
-    records.truncate(20);
-    while serde_json::to_vec(&records).map_err(|_| invalid())?.len() > 240_000 && records.len() > 1
+    let mut records = previous
+        .record
+        .map(|r| r.value["records"].as_array().cloned().ok_or_else(invalid))
+        .transpose()?
+        .unwrap_or_default();
+    let old = records.clone();
+    let id = record["id"].as_str().ok_or_else(invalid)?;
+    let bytes = serde_json::to_vec(&record).map_err(|_| invalid())?.len();
+    if bytes > 240_000 {
+        return Err(invalid());
+    }
+    let mut summary = record.clone();
+    summary["samples"] = json!([]);
+    summary["remaining"] = json!([]);
+    summary["summaryOnly"] = json!(true);
+    summary["detailBytes"] = json!(bytes);
+    if let Some(a) = summary["attribution"].as_object_mut() {
+        a.retain(|k, _| {
+            matches!(
+                k.as_str(),
+                "prediction"
+                    | "prediction_name"
+                    | "family_prediction_name"
+                    | "probability"
+                    | "decision"
+                    | "used_outputs"
+            )
+        });
+        a.insert("results".into(), json!([]));
+    }
+    records.retain(|r| r["id"] != id);
+    records.insert(0, summary);
+    let mut counts = std::collections::HashMap::new();
+    records.retain(|r| {
+        let key = (
+            r["accountId"].as_str().unwrap_or_default().to_owned(),
+            r["kind"].as_str().unwrap_or_default().to_owned(),
+        );
+        let count = counts.entry(key).or_insert(0);
+        *count += 1;
+        *count <= 20
+    });
+    records.truncate(200);
+    while (serde_json::to_vec(&records).map_err(|_| invalid())?.len() > 220_000
+        || records
+            .iter()
+            .map(|r| r["detailBytes"].as_u64().unwrap_or(0))
+            .sum::<u64>()
+            > 15_000_000)
+        && records.len() > 1
     {
         records.pop();
     }
-    if serde_json::to_vec(&records).map_err(|_| invalid())?.len() > 240_000 {
-        return Err(invalid());
-    }
+    let removed: Vec<Value> = old
+        .into_iter()
+        .filter(|r| !records.iter().any(|v| v["id"] == r["id"]))
+        .collect();
+    // 详情先提交，调用意图的索引提交成功后才允许执行模型
+    let (detail, _): (StateGetResult, _) = callback(
+        host,
+        "host.state.get",
+        StateGetRequest {
+            namespace: "details".into(),
+            key: id.into(),
+        },
+        vec![],
+    )
+    .await?;
+    let _: (StatePutResult, _) = callback(
+        host,
+        "host.state.put",
+        StatePutRequest {
+            namespace: "details".into(),
+            key: id.into(),
+            expected_version: detail.record.map(|r| r.version),
+            value: json!({"record":record}),
+        },
+        vec![],
+    )
+    .await?;
     let _: (StatePutResult, _) = callback(
         host,
         "host.state.put",
@@ -94,5 +197,6 @@ pub async fn append(host: &HostClient, record: Value) -> Result<(), PluginFault>
         vec![],
     )
     .await?;
+    remove_details(host, &removed).await?;
     Ok(())
 }

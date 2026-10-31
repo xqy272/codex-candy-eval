@@ -19,6 +19,7 @@ struct Host {
     writer: WriteHalf<DuplexStream>,
     task: JoinHandle<()>,
     saved: Option<Value>,
+    details: std::collections::HashMap<String, (Value, u64)>,
     version: u64,
     executes: usize,
     consumed: Vec<u64>,
@@ -48,6 +49,7 @@ impl Host {
             writer,
             task,
             saved: None,
+            details: Default::default(),
             version: 0,
             executes: 0,
             consumed: vec![],
@@ -67,6 +69,40 @@ impl Host {
         .await;
         assert!(matches!(this.next().await.message, Message::Ready { .. }));
         this
+    }
+    async fn detail_callback(&mut self, id: u64, method: &str, params: &Value, save: bool) {
+        let key = params["key"].as_str().unwrap().to_owned();
+        match method {
+            "host.state.get" => {
+                let record = self.details.get(&key).map(
+                    |(value, version)| json!({"value":value,"version":version,"schema_version":1}),
+                );
+                self.reply(id, json!({"record":record}), vec![]).await;
+            }
+            "host.state.put" => {
+                let old = self.details.get(&key).map(|(_, v)| *v);
+                assert_eq!(params["expected_version"], json!(old));
+                if save || params["value"]["record"]["pendingStep"].is_number() {
+                    let version = old.unwrap_or(0) + 1;
+                    self.details.insert(key, (params["value"].clone(), version));
+                    self.reply(id, json!({"version":version}), vec![]).await;
+                } else {
+                    self.send(Frame::control(Message::Error {
+                        id,
+                        error: gateway_plugin_sdk::PluginFault::new(
+                            gateway_plugin_sdk::ErrorCode::Conflict,
+                            "mock save failure",
+                        ),
+                    }))
+                    .await;
+                }
+            }
+            "host.state.delete" => {
+                self.details.remove(&key);
+                self.reply(id, json!({"deleted":true}), vec![]).await;
+            }
+            _ => panic!("Unexpected detail callback"),
+        }
     }
     async fn send(&mut self, frame: Frame) {
         write_frame(&mut self.writer, &frame).await.unwrap();
@@ -120,6 +156,11 @@ impl Host {
                 Message::Callback {
                     id, method, params, ..
                 } => match method.as_str() {
+                    "host.state.get" | "host.state.put" | "host.state.delete"
+                        if params["namespace"] == "details" =>
+                    {
+                        self.detail_callback(id, &method, &params, save).await
+                    }
                     "host.model.execute" => {
                         self.executes += 1;
                         assert_eq!(params["account_id"], "account-test");
@@ -127,7 +168,11 @@ impl Host {
                         assert_eq!(params["provider"], "openai");
                         let body: Value = serde_json::from_slice(&frame.payload).unwrap();
                         assert_eq!(body["store"], false);
-                        assert_eq!(body["tools"], json!([]));
+                        assert_eq!(body["tool_choice"], "none");
+                        if !body["tools"].as_array().unwrap().is_empty() {
+                            assert!(body["instructions"].as_str().unwrap().len() > 20000);
+                            assert!(body["input"].as_array().unwrap().len() > 3);
+                        }
                         assert!(body["instructions"].is_string());
                         let mut events =
                             vec![ExecutionEvent::canonical(CanonicalEvent::TextDelta {
@@ -166,7 +211,11 @@ impl Host {
                             }
                         );
                         assert!(params["value"]["records"].as_array().unwrap().len() <= 20);
-                        if save || params["value"]["records"][0]["pendingStep"].is_number() {
+                        if save
+                            || params["value"]["records"]
+                                .get(0)
+                                .is_some_and(|r| r["pendingStep"].is_number())
+                        {
                             self.version += 1;
                             self.saved = Some(params["value"].clone());
                             self.reply(id, json!({"version":self.version}), vec![])
@@ -195,6 +244,11 @@ impl Host {
                 Message::Callback {
                     id, method, params, ..
                 } => match method.as_str() {
+                    "host.state.get" | "host.state.put" | "host.state.delete"
+                        if params["namespace"] == "details" =>
+                    {
+                        self.detail_callback(id, &method, &params, true).await
+                    }
                     "host.state.get" => {
                         let record = self
                             .saved
@@ -347,6 +401,10 @@ async fn duplicate_completion_and_interrupted_checkpoint_do_not_reexecute() {
     );
     host.saved.as_mut().unwrap()["records"][0]["status"] = json!("running");
     host.saved.as_mut().unwrap()["records"][0]["pendingStep"] = json!(1);
+    if let Some((detail, _)) = host.details.get_mut("partial") {
+        detail["record"]["status"] = json!("running");
+        detail["record"]["pendingStep"] = json!(1);
+    }
     partial["step"] = json!(1);
     host.call(7, "api/run", Some(partial)).await;
     assert_eq!(
@@ -376,5 +434,71 @@ async fn cancellation_between_samples_preserves_the_first_answer() {
         "cancelled"
     );
     assert_eq!(host.executes, 1);
+    host.shutdown().await;
+}
+
+#[tokio::test]
+async fn context_profile_is_versioned_and_history_clear_is_scoped() {
+    let mut host = Host::start().await;
+    let mut req = run("profile", "candy");
+    req["profile"] = json!("codex-context-v1");
+    host.call(1, "api/run", Some(req.clone())).await;
+    let result = host.result(1, "21", true, true).await.1;
+    assert_eq!(result["record"]["requestProfile"], "codex-context-v1");
+    req["profile"] = json!("simple-v1");
+    host.call(3, "api/run", Some(req)).await;
+    assert_eq!(host.result(3, "21", true, true).await.0, 409);
+    assert_eq!(host.executes, 1);
+    host.call(
+        5,
+        "api/clear",
+        Some(json!({"account_id":"unrelated", "kind":null})),
+    )
+    .await;
+    assert_eq!(host.result(5, "", false, true).await.0, 200);
+    assert_eq!(
+        host.saved.as_ref().unwrap()["records"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    host.call(
+        7,
+        "api/clear",
+        Some(json!({"account_id":"account-test", "kind":"candy"})),
+    )
+    .await;
+    assert_eq!(host.result(7, "", false, true).await.0, 200);
+    assert!(
+        host.saved.as_ref().unwrap()["records"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    host.shutdown().await;
+}
+
+#[tokio::test]
+async fn legacy_inline_history_remains_readable_without_reexecution() {
+    let mut host = Host::start().await;
+    let req = run("legacy", "candy");
+    let mut old = req.clone();
+    old["status"] = json!("correct");
+    old["samples"] = json!([{"answer":{"text":"21"}}]);
+    host.saved = Some(json!({"records":[old]}));
+    host.version = 1;
+    host.call(1, "api/detail", Some(json!({"id":"legacy"})))
+        .await;
+    assert_eq!(
+        host.result(1, "", false, true).await.1["record"]["samples"][0]["answer"]["text"],
+        "21"
+    );
+    host.call(3, "api/run", Some(req)).await;
+    assert_eq!(
+        host.result(3, "", false, true).await.1["record"]["status"],
+        "correct"
+    );
+    assert_eq!(host.executes, 0);
     host.shutdown().await;
 }

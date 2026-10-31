@@ -62,6 +62,8 @@ pub fn registration() -> ManagementRegistration {
             route("GET", "api/history"),
             route("POST", "api/run"),
             route("POST", "api/cancel"),
+            route("POST", "api/clear"),
+            route("POST", "api/detail"),
         ],
         resources: ["web/index.html", "web/app.js", "web/app.css"]
             .into_iter()
@@ -112,6 +114,12 @@ fn body<T: serde::de::DeserializeOwned>(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct KeyRequest {
     client_key_id: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ClearRequest {
+    account_id: Option<String>,
+    kind: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -246,6 +254,13 @@ async fn dispatch(
             {
                 if record["status"] == "running" && record["id"].as_str() != active.as_deref() {
                     record["status"] = json!("interrupted");
+                    if record["summaryOnly"] == true
+                        && let Some(id) = record["id"].as_str()
+                        && let Some(detail) = history::find(&call.host, id).await?
+                        && detail["status"] != "running"
+                    {
+                        record["status"] = detail["status"].clone();
+                    }
                 }
             }
             Ok(value)
@@ -270,6 +285,78 @@ async fn dispatch(
             drop(admission);
             let _guard = ActiveGuard(Arc::clone(&state));
             evaluation::run(state, call, req, rx).await
+        }
+        ("POST", "api/detail") => {
+            let req: CancelRequest = body(call)?;
+            if req.id.is_empty() || req.id.len() > 128 || req.id.chars().any(char::is_control) {
+                return Err(fault(ErrorCode::InvalidInput, "记录 ID 无效"));
+            }
+            let mut record = history::find(&call.host, &req.id).await?;
+            let active = state
+                .active
+                .lock()
+                .map_err(|_| history::invalid())?
+                .as_ref()
+                .is_some_and(|a| a.id == req.id);
+            if !active
+                && let Some(r) = record.as_mut()
+                && r["status"] == "running"
+            {
+                r["status"] = json!("interrupted");
+            }
+            Ok(json!({"record":record}))
+        }
+        ("POST", "api/clear") => {
+            let req: ClearRequest = body(call)?;
+            let _admission = state.admission.lock().await;
+            if state
+                .active
+                .lock()
+                .map_err(|_| history::invalid())?
+                .is_some()
+            {
+                return Err(fault(ErrorCode::Conflict, "测试期间不能清理历史"));
+            }
+            let saved = history::load(&call.host).await?;
+            if let Some(record) = saved.record {
+                let mut value = record.value;
+                let old = value["records"]
+                    .as_array()
+                    .cloned()
+                    .ok_or_else(history::invalid)?;
+                value["records"]
+                    .as_array_mut()
+                    .ok_or_else(history::invalid)?
+                    .retain(|r| {
+                        !(req
+                            .account_id
+                            .as_ref()
+                            .is_none_or(|id| r["accountId"] == id.as_str())
+                            && req
+                                .kind
+                                .as_ref()
+                                .is_none_or(|kind| r["kind"] == kind.as_str()))
+                    });
+                let _: (gateway_plugin_sdk::call::host::StatePutResult, _) = history::callback(
+                    &call.host,
+                    "host.state.put",
+                    gateway_plugin_sdk::call::host::StatePutRequest {
+                        namespace: "history".into(),
+                        key: "records".into(),
+                        expected_version: Some(record.version),
+                        value: value.clone(),
+                    },
+                    vec![],
+                )
+                .await?;
+                let kept = value["records"].as_array().ok_or_else(history::invalid)?;
+                let removed: Vec<Value> = old
+                    .into_iter()
+                    .filter(|r| !kept.iter().any(|k| k["id"] == r["id"]))
+                    .collect();
+                history::remove_details(&call.host, &removed).await?;
+            }
+            Ok(json!({"cleared":true}))
         }
         ("POST", "api/cancel") => {
             let req: CancelRequest = body(call)?;

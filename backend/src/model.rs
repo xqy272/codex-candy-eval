@@ -14,7 +14,7 @@ pub struct Answer {
 }
 
 pub fn decode(bytes: &[u8]) -> Result<Answer, &'static str> {
-    let batch = ModelEventBatch::decode(bytes).map_err(|_| "模型事件格式无效")?;
+    let batch = ModelEventBatch::decode(bytes).map_err(|_| "invalid_events")?;
     let mut result = Answer::default();
     let mut terminals = 0;
     let mut failed = false;
@@ -42,7 +42,7 @@ pub fn decode(bytes: &[u8]) -> Result<Answer, &'static str> {
             match fact {
                 CanonicalEvent::TextDelta { text, .. } => {
                     if result.text.len() + text.len() > 48 * 1024 {
-                        return Err("回答超过保存上限");
+                        return Err("answer_too_large");
                     }
                     result.text.push_str(&text);
                 }
@@ -56,10 +56,10 @@ pub fn decode(bytes: &[u8]) -> Result<Answer, &'static str> {
         }
     }
     if failed || terminals != 1 || !result.completed {
-        return Err("请求没有完整完成");
+        return Err("incomplete");
     }
     if result.text.trim().is_empty() {
-        return Err("模型没有返回可用文本");
+        return Err("empty_answer");
     }
     Ok(result)
 }

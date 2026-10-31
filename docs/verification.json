@@ -1,11 +1,13 @@
 {
   "observed_date": "2026-10-31",
-  "host_contract": "CPR v3.35.1",
-  "archive_sha256": "f4cba3ef7c9da87f72ddbd4366e7dc6b7aebc49d263f6197069d50ac93e568d7",
-  "rust_tests_passed": 12,
-  "ui_component_tests_passed": 6,
+  "version": "1.1.0",
+  "host_contract": "CPR v3.36.0",
+  "official_host_sha256": "40fb64827603fb6caad08f031180b3672f5e9836b98c933d193d89a80c43f126",
+  "archive_sha256": "cb8976768b0de9fc3740ced45604ce994c26be913164bdbbbabbd72cb9f4b18f",
+  "rust_tests_passed": 14,
+  "ui_component_tests_passed": 8,
   "native_business_checks": [
-    "Real host upgrade and old target invalidation",
+    "Current package accepted and native instance running",
     "Previously persisted history retained",
     "Candy 21 grading, complete terminal, usage and persisted record",
     "Duplicate completed submission does not execute upstream again",
@@ -18,8 +20,12 @@
     "Disable and re-enable invalidate old page and retain private history",
     "Key account scope enforced and selected account confirmed by Core attempt facts",
     "Runtime replacement preserves an interrupted intent and does not replay uncertain work",
-    "Version rollback and return retain compatible private state",
-    "History retention bound and unique record replacement under repeated use"
+    "History retention bound and unique record replacement under repeated use",
+    "Pinned Codex context passes through real Core with tool execution disabled",
+    "History list contains summaries and detail route retrieves the original response",
+    "Reusing an execution ID with a different request profile is rejected",
+    "Per-account retention preserves another account through 21 new runs",
+    "Scoped history clearing removes detail data and preserves unrelated account records"
   ],
   "native_page_checks": [
     "Native iframe loading and host resource/CSP assembly",
@@ -30,5 +36,7 @@
     "Host dark theme and narrow layout"
   ],
   "page_errors": [],
-  "model_upstream": "Local controlled fixtures; no real model quota"
+  "model_upstream": "Local controlled fixtures; no real model quota",
+  "long_task_limit_seconds": 150,
+  "cross_version_rollback_tested_for_this_release": false
 }

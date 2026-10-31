@@ -15,7 +15,7 @@ def count():
 def instances():return c.api('/api/admin/plugins/instances')
 def instance():return next(i for i in instances() if i['id']==state['instanceId'])
 
-new=ROOT/'dist/cloudops.codex-candy-eval-1.0.0-x86_64-unknown-linux-gnu.tar.gz'
+new=ROOT/'dist/cloudops.codex-candy-eval-1.1.0-x86_64-unknown-linux-gnu.tar.gz'
 _,digest=c.install(new)
 if instance()['artifactSha256']!=digest:
  before=c.extension()['target']
@@ -87,5 +87,5 @@ assert any(r['id']==state['smokeRecordId']for r in c.route('api/history')[1]['re
 ok('Disable and re-enable invalidate old page and retain private history')
 state['artifactSha256']=digest
 (WORK/'state.json').write_text(json.dumps(state,ensure_ascii=False,indent=2))
-(WORK/'business-report.json').write_text(json.dumps({'host':'CPR v3.35.1','checks':checks,'artifactSha256':digest,'model_requests':'local controlled upstream only'},ensure_ascii=False,indent=2))
+(WORK/'business-report.json').write_text(json.dumps({'host':'CPR v3.36.0','checks':checks,'artifactSha256':digest,'model_requests':'local controlled upstream only'},ensure_ascii=False,indent=2))
 print('All native host business checks passed',flush=True)

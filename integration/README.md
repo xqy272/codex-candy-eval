@@ -2,9 +2,9 @@
 
 这些脚本启动独立数据库、Redis、CPR 和本机受控上游，用假账号执行完整流程。不会访问真实模型。临时宿主只监听 `127.0.0.1:18380`，数据库和 Redis 使用 15432/16379，受控上游使用 18381；运行前这些端口应空闲。
 
-已验证环境：Ubuntu 24.04 / WSL2，官方 CPR v3.35.1 Linux amd64 发行包，PostgreSQL 16.15、Redis 7.0.15；浏览器为本机 Chrome。数据库和账号是每次新建的隔离测试资源，不复用生产配置。插件不自行访问 SQL 或 Redis，持久化通过 CPR 公开 SDK。
+已验证环境：Ubuntu 24.04 / WSL2，官方 CPR v3.36.0 Linux amd64 发行包，PostgreSQL 16.15、Redis 7.0.15；浏览器为本机 Chrome。数据库和账号是每次新建的隔离测试资源，不复用生产配置。插件不自行访问 SQL 或 Redis，持久化通过 CPR 公开 SDK。
 
-先从官方 v3.35.1 Release 下载并按 `checksums.txt` 验证 Linux amd64 发行包，解压为 `/path/to/cpr`，保留其 `web/dist`。准备 PostgreSQL 与 Redis 程序；Ubuntu 24.04 可用以下脚本只下载并解压测试程序，不安装或启动系统服务：
+先从官方 v3.36.0 Release 下载并按 `checksums.txt` 验证 Linux amd64 发行包，解压后将含 `codex-proxy-rs` 可执行文件与 `web/dist` 的目录作为 `/path/to/cpr`，保留其 `web/dist`。准备 PostgreSQL 与 Redis 程序；Ubuntu 24.04 可用以下脚本只下载并解压测试程序，不安装或启动系统服务：
 
 ```bash
 bash integration/prepare-ubuntu-tools.sh
@@ -28,6 +28,8 @@ python3 integration/run_host.py \
 python integration/native_client.py
 python integration/business.py
 python integration/lifecycle.py
+python integration/optimization.py
+python integration/optimization.py
 node integration/browser.mjs
 ```
 

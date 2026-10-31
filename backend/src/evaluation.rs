@@ -16,6 +16,10 @@ use std::{
 };
 use tokio::sync::watch;
 
+fn default_profile() -> String {
+    "simple-v1".into()
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RunRequest {
@@ -27,6 +31,8 @@ pub struct RunRequest {
     pub kind: String,
     #[serde(default)]
     pub step: u8,
+    #[serde(default = "default_profile")]
+    pub profile: String,
 }
 impl RunRequest {
     pub fn valid(&self) -> bool {
@@ -38,6 +44,7 @@ impl RunRequest {
                 self.effort.as_str(),
                 "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
             )
+            && matches!(self.profile.as_str(), "simple-v1" | "codex-context-v1")
             && self.step < if self.kind == "fingerprint" { 3 } else { 1 }
     }
 }
@@ -119,6 +126,34 @@ async fn ask(
         return Err((None, "cancelled"));
     }
     let mut body = json!({"model":req.model,"instructions":p.instructions,"input":[{"role":"user","content":p.prompt}],"stream":true,"store":false,"tools":[],"tool_choice":"none"});
+    if req.profile == "codex-context-v1" {
+        let context: Value =
+            serde_json::from_slice(include_bytes!("../../data/codex-context.json"))
+                .map_err(|_| (None, "invalid_request"))?;
+        body["instructions"] = json!(format!(
+            "{}\n\n{}",
+            context["base_instructions"].as_str().unwrap_or_default(),
+            p.instructions
+        ));
+        let mut input = Vec::new();
+        for message in context["messages"]
+            .as_array()
+            .ok_or((None, "invalid_request"))?
+        {
+            let content: Vec<Value> = message["content"]
+                .as_array()
+                .ok_or((None, "invalid_request"))?
+                .iter()
+                .map(|part| json!({"type":"input_text","text":part["text"]}))
+                .collect();
+            input.push(json!({"role":message["role"],"content":content}));
+        }
+        input.push(json!({"role":"user","content":"<environment_context>\n<cwd>/home/user/workspace</cwd>\n<shell>bash</shell>\n<timezone>Etc/UTC</timezone>\n</environment_context>"}));
+        input.push(json!({"role":"user","content":p.prompt}));
+        body["input"] = json!(input);
+        body["tools"] = context["tools"].clone();
+        body["text"] = json!({"verbosity":"low"});
+    }
     if !req.effort.is_empty() {
         body["reasoning"] = json!({"effort":req.effort});
     }
@@ -139,9 +174,20 @@ async fn ask(
         _=tokio::time::sleep(Duration::from_secs(150))=>return Err((None,"timeout")),
         result=history::callback(&call.host,"host.model.execute",metadata,serde_json::to_vec(&body).map_err(|_|(None,"invalid_request"))?)=>result,
     };
-    let (meta, payload) = reply.map_err(|_| (None, "execution_failed"))?;
+    let (meta, payload) = reply.map_err(|error| {
+        (
+            None,
+            match error.code {
+                ErrorCode::PermissionDenied | ErrorCode::Rejected => "permission_denied",
+                ErrorCode::Timeout => "timeout",
+                ErrorCode::Capacity => "capacity",
+                ErrorCode::Cancelled => "cancelled",
+                _ => "execution_failed",
+            },
+        )
+    })?;
     let answer =
-        model::decode(&payload).map_err(|_| (Some(meta.request_id.clone()), "incomplete"))?;
+        model::decode(&payload).map_err(|reason| (Some(meta.request_id.clone()), reason))?;
     Ok((meta.request_id, answer))
 }
 
@@ -165,6 +211,9 @@ pub async fn run(
                     return Err(conflict());
                 }
             }
+            if record["requestProfile"].as_str().unwrap_or("simple-v1") != req.profile {
+                return Err(conflict());
+            }
             // 已记录的终态直接返回，重复提交不会再次消费模型额度。
             if !matches!(record["status"].as_str(), Some("running" | "partial")) {
                 return Ok(json!({"record":record,"persisted":true,"nextStep":Value::Null}));
@@ -184,7 +233,7 @@ pub async fn run(
             }
             let source: Value = serde_json::from_slice(include_bytes!("../../vendor/SOURCES.json"))
                 .map_err(|_| history::invalid())?;
-            json!({"id":req.id,"accountId":req.account_id,"actualAccountId":Value::Null,"clientKeyId":req.client_key_id,"model":req.model,"effort":req.effort,"kind":req.kind,"status":"partial","startedAt":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"durationMs":0,"samples":[],"remaining":plan(&req.kind)?,"pendingStep":Value::Null,"expectedSamples":if req.kind=="fingerprint"{3}else{1},"attribution":Value::Null,"detectorVersion":state.detector.built_at(),"detectorRevision":source["detectorRevision"],"gradingAnswer":if req.kind=="candy"{Some(21)}else{None},"pluginVersion":env!("CARGO_PKG_VERSION"),"upstreamAttempts":Value::Null})
+            json!({"id":req.id,"accountId":req.account_id,"actualAccountId":Value::Null,"clientKeyId":req.client_key_id,"model":req.model,"effort":req.effort,"kind":req.kind,"status":"partial","startedAt":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"durationMs":0,"samples":[],"remaining":plan(&req.kind)?,"pendingStep":Value::Null,"expectedSamples":if req.kind=="fingerprint"{3}else{1},"attribution":Value::Null,"detectorVersion":state.detector.built_at(),"detectorRevision":source["detectorRevision"],"requestContextSha256":if req.profile=="codex-context-v1" {source["files"]["data/codex-context.json"].clone()} else {Value::Null},"requestProfile":req.profile,"gradingAnswer":if req.kind=="candy"{Some(21)}else{None},"pluginVersion":env!("CARGO_PKG_VERSION"),"upstreamAttempts":Value::Null})
         }
     };
     let count = record["samples"]

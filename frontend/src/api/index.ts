@@ -2,9 +2,9 @@ export interface Account { account_id: string; name: string; email: string | nul
 export interface ClientKey { id: string; name: string; enabled: boolean }
 export interface Sample { status: string; prompt: string; instructions: string; expectedCount: number | null; requestId: string | null; answer: { text: string; usage: Record<string, number | null> } | null; durationMs: number }
 export interface RecordEntry {
-  id: string; accountId: string; kind: string; model: string; effort: string; status: string
-  startedAt: number; durationMs: number; samples: Sample[]; detectorVersion: string; expectedSamples?: number; gradingAnswer?: number
-  attribution: null | { prediction_name: string; probability: number | null; decision: string; diagnostics?: { parsed_numbers: number; accepted: boolean }[]; results: { display_name: string; score: number; probability: number | null }[] }
+  summaryOnly?: boolean; id: string; accountId: string; kind: string; model: string; effort: string; status: string
+  requestProfile?: string; startedAt: number; durationMs: number; samples: Sample[]; detectorVersion: string; expectedSamples?: number; gradingAnswer?: number
+  attribution: null | { prediction?: string; family_prediction_name?: string; used_outputs?: number; evidence?: { reason: string }; prediction_name: string; probability: number | null; decision: string; diagnostics?: { parsed_numbers: number; accepted: boolean }[]; results: { display_name: string; score: number; probability: number | null }[] }
 }
 interface Bridge {
   readonly theme: 'light' | 'dark'
@@ -25,6 +25,8 @@ export const api = {
   snapshot: () => request<{ accounts: Account[]; keys: ClientKey[]; detectorVersion: string; activeId?: string | null }>('api/snapshot'),
   models: (clientKeyId: string) => request<{ models: string[] }>('api/models', { clientKeyId }),
   history: () => request<{ records: RecordEntry[] }>('api/history'),
-  run: (data: { id: string; accountId: string; clientKeyId: string; model: string; effort: string; kind: string; step: number }) => request<{ record: RecordEntry; persisted: boolean; nextStep: number | null }>('api/run', data),
+  run: (data: { summaryOnly?: boolean; id: string; accountId: string; clientKeyId: string; model: string; effort: string; kind: string; profile: string; step: number }) => request<{ record: RecordEntry; persisted: boolean; nextStep: number | null }>('api/run', data),
+  detail: (id: string) => request<{record: RecordEntry | null}>('api/detail', {id}),
+  clear: (account_id: string | null, kind: string | null) => request('api/clear', { account_id, kind }),
   cancel: (id: string) => request<{ cancelled: boolean; record?: RecordEntry }>('api/cancel', { id }),
 }
