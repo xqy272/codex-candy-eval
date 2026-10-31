@@ -2,6 +2,7 @@
 mod evaluation;
 mod history;
 mod management;
+pub mod migration;
 pub mod model;
 pub mod prompts;
 
@@ -20,6 +21,13 @@ pub fn plugin(data: &Path) -> Result<ComposedPlugin, Box<dyn std::error::Error>>
                 let state = Arc::clone(&state);
                 async move { management::handle(state, call).await }
             })?
+            .on(
+                gateway_plugin_sdk::client::methods::STATE_MIGRATE,
+                |call| async move {
+                    migration::migrate(call.request)
+                        .map(gateway_plugin_sdk::client::TypedReply::new)
+                },
+            )?
             .build()?,
     )
 }

@@ -38,5 +38,12 @@
   "page_errors": [],
   "model_upstream": "Local controlled fixtures; no real model quota",
   "long_task_limit_seconds": 150,
-  "cross_version_rollback_tested_for_this_release": false
+  "cross_version_rollback_tested_for_this_release": false,
+  "migration_fix": {
+    "version": "1.1.1",
+    "archive_sha256": "268b0807473a827b7d320d562657d747e48fef9bf87d277d8d417abae36784bc",
+    "rust_tests_passed": 16,
+    "migration_evidence": "migration-1.1.1.json",
+    "native_ui_passed": true
+  }
 }

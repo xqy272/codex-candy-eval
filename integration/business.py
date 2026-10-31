@@ -15,7 +15,7 @@ def count():
 def instances():return c.api('/api/admin/plugins/instances')
 def instance():return next(i for i in instances() if i['id']==state['instanceId'])
 
-new=ROOT/'dist/cloudops.codex-candy-eval-1.1.0-x86_64-unknown-linux-gnu.tar.gz'
+new=ROOT/'dist/cloudops.codex-candy-eval-1.1.1-x86_64-unknown-linux-gnu.tar.gz'
 _,digest=c.install(new)
 if instance()['artifactSha256']!=digest:
  before=c.extension()['target']

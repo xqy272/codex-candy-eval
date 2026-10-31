@@ -40,3 +40,17 @@ node integration/browser.mjs
 覆盖的行为包括：安装加载、账号/模型目录、糖果判分和用量、三题指纹、SVG 原文与预览、错误与缺失终态、重复提交、取消和账号租约释放、题间取消、禁止换号、Key 范围与实际账号核对、运行时替换中断、历史保留、版本回退、原生页面刷新及深色窄屏。
 
 结果、截图及临时控制信息保存在忽略提交的 `.runtime/integration/`。退出宿主进程，或创建该目录下的 `stop` 文件，会停止自建进程并清理临时数据库与控制凭据。测试报告和截图保留。Key、密码和 Cookie 不写入验收报告。
+
+## 旧状态升级回归
+
+使用空白测试数据库，启动参数将 `--cpr-dir` 指向官方 3.35.1 的程序目录，并传 `--upgrade-cpr-dir /path/to/3.36.0`。这仅在测试目录出现 `upgrade-host` 标记时停止临时 CPR 应用并以新版重启；PG、Redis 和测试数据保持。
+
+将已发布的 1.0.0、1.1.0 和当前 1.1.1 包放在 dist，执行：
+
+```bash
+python integration/native_client.py --baseline dist/cloudops.codex-candy-eval-1.0.0-x86_64-unknown-linux-gnu.tar.gz
+python integration/migration.py
+node integration/browser.mjs
+```
+
+脚本覆盖原版 1.0.0 在真实 3.35.1 建立历史、同库升级 3.36.0、复现切换 1.1.0 冲突及停用后仍冲突、迁移 1.1.1 保留历史、新版写入与重新启用，以及独立 1.1.0 实例的摘要和详情保留。全部模型请求只到本地受控上游。

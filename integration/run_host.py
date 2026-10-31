@@ -7,6 +7,7 @@ parser.add_argument('--cpr-dir',type=Path,required=True)
 parser.add_argument('--postgres-bin',type=Path,required=True)
 parser.add_argument('--redis-server',type=Path,required=True)
 parser.add_argument('--library-dir',type=Path)
+parser.add_argument('--upgrade-cpr-dir',type=Path)
 args=parser.parse_args()
 WORK=ROOT/'.runtime/integration';WORK.mkdir(parents=True,exist_ok=True)
 CPR=args.cpr_dir.resolve()
@@ -111,9 +112,20 @@ try:
     control={'root':str(RUNTIME),'username':'eval-admin','password':password,'base':'http://127.0.0.1:18380'}
     (WORK/'control.json').write_text(json.dumps(control));(WORK/'control.json').chmod(0o600)
     control_written=True
-    print('CPR v3.36.0 isolated host ready on 127.0.0.1:18380',flush=True)
+    print('Isolated CPR host ready on 127.0.0.1:18380',flush=True)
     for _ in range(3600):
         if (WORK/'stop').exists():break
+        if args.upgrade_cpr_dir and (WORK/'upgrade-host').exists():
+            (WORK/'upgrade-host').unlink()
+            os.killpg(app.pid,signal.SIGTERM);app.wait(timeout=15)
+            upgraded=args.upgrade_cpr_dir.resolve()
+            template['api']['asset_directory']=str(upgraded/'web/dist')
+            (deploy/'config.yaml').write_text(json.dumps(template))
+            app=spawn([upgraded/'codex-proxy-rs'],'app.log')
+            wait_url('http://127.0.0.1:18380/healthz')
+            (WORK/'host-upgraded').write_text('ready')
+            print('Isolated CPR host upgraded with database preserved',flush=True)
+
         if app.poll() is not None:raise RuntimeError('CPR host exited')
         temporary=WORK/'upstream-observations.tmp'
         temporary.write_text(json.dumps({'models':[c['model']for c in Mock.calls],'closed':Mock.closed,'request_facts':[{'model':c['model'],'instructions_chars':len(c['body'].get('instructions','')),'input_items':len(c['body'].get('input',[])),'tools':len(c['body'].get('tools',[])),'tool_choice':c['body'].get('tool_choice')}for c in Mock.calls]}))
