@@ -1,0 +1,12 @@
+{
+  "observed_date": "2026-11-01",
+  "host": "CPR 3.36.0",
+  "old_plugin": "1.1.1",
+  "new_plugin": "1.1.2",
+  "fixture": "800 empty text delta events with 8192-byte ignored extension field, followed by complete answer 21",
+  "old_status": "capacity",
+  "new_status": "correct",
+  "request_id_preserved": true,
+  "archive_sha256": "5d13be2f8e77d2b43f285520e417beac90def185027db77b70a4323c06f157df",
+  "real_model_requests": false
+}

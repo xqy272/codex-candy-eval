@@ -44,7 +44,7 @@ if __name__=='__main__':
  args=parser.parse_args()
  client=Client()
  if client.api('/api/admin/accounts')['items']:raise RuntimeError('测试宿主必须没有既有账号')
- old=args.baseline or ROOT/'dist/cloudops.codex-candy-eval-1.1.1-x86_64-unknown-linux-gnu.tar.gz'
+ old=args.baseline or ROOT/'dist/cloudops.codex-candy-eval-1.1.2-x86_64-unknown-linux-gnu.tar.gz'
  installed,digest=client.install(old)
  instances=client.api('/api/admin/plugins/instances')
  print('Verified and installed baseline; instance status:',[(v['enabled'],v['running'],v['loadError'])for v in instances if v['artifactSha256']==digest])

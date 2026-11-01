@@ -1,6 +1,6 @@
 # codex-candy-eval · CPR Codex 账号测试
 
-版本 **1.1.1**。在 CPR 管理端选择账号、客户端 Key、模型和推理强度，运行糖果题、模型指纹或画鹈鹕。一个安装包包含插件程序、管理页面、题库及检测器，由 CPR 管理，无需另部署服务。
+版本 **1.1.2**。在 CPR 管理端选择账号、客户端 Key、模型和推理强度，运行糖果题、模型指纹或画鹈鹕。一个安装包包含插件程序、管理页面、题库及检测器，由 CPR 管理，无需另部署服务。
 
 已在真实 CPR v3.36.0 中验证完整业务、原生管理页、权限、取消、持久化及运行时替换。测试调用本机受控上游，不消费真实账号额度。[验收记录](docs/verification.md)。
 
@@ -17,7 +17,7 @@ cd codex-candy-eval
 
 已验证平台为 Linux x86_64，要求 glibc 2.28+；宿主合同为 CPR v3.36.0、协议 7、management v2。包声明兼容范围 `>=3.36.0, <3.37.0`。
 
-1. 在 CPR 管理端进入“插件管理”，上传 `cloudops.codex-candy-eval-1.1.1-x86_64-unknown-linux-gnu.tar.gz`，核对同名 `.sha256` 文件及插件 ID `cloudops.codex-candy-eval`。
+1. 在 CPR 管理端进入“插件管理”，上传 `cloudops.codex-candy-eval-1.1.2-x86_64-unknown-linux-gnu.tar.gz`，核对同名 `.sha256` 文件及插件 ID `cloudops.codex-candy-eval`。
 2. 确认来源和完整信任。首次安装会自动创建并启用默认实例，无必填配置。运行状态应为正常。
 3. 打开“Codex 账号测试”，选择已启用的客户端 Key 和模型，测试单个账号，或勾选账号后批量测试。Key 仍须有目标账号及模型的使用权限。
 
@@ -37,7 +37,7 @@ cd codex-candy-eval
 
 ## 从旧版升级
 
-1.0.0 或 1.1.0 请直接切换至 **1.1.1**。上传新版归档后，在原实例选择“切换版本”；保留原实例和历史，勿删除实例或清空状态来绕过错误。
+1.0.0、1.1.0 或 1.1.1 请直接切换至 **1.1.2**。上传新版归档后，在原实例选择“切换版本”；保留原实例和历史，勿删除实例或清空状态来绕过错误。
 
 1.1.0 扩大 history 的 schema 上限却未声明迁移，会出现“插件状态版本不兼容或已发生并发变更”，禁用后也无法绕过。1.1.1 将 history 状态升级到版本 2，并通过宿主事务从版本 1 原样迁移。旧平面历史、分片摘要及详情均保留。
 
@@ -50,6 +50,12 @@ cd codex-candy-eval
 “简化请求 v1”保留无工具的简短请求。1.0.0 的记录归入此语境。结果记录保存语境 ID；相同执行 ID 不能换语境重用。较长的 Codex 上下文会增加输入 Token 消耗。
 
 账号行显示当前测试最近结果和时间。糖果“正确/有效”按当前模型、推理强度、语境分组；只计答对和答错，执行失败单列。历史与 JSON 中保留原始回答，糖果固定按独立数字 21 判分。
+
+## 执行失败诊断
+
+模型响应通过 CPR 受管流接口逐块读取，不将整轮 wire 与 reasoning 事件累计成单份结果；仍要求完整终态，正文最多 48 KiB。开始执行后立即取得请求 ID，后续读取失败、取消或超时也保留该 ID。正常结束和提前终止均关闭受管流，父调用退出仍由宿主回收。
+
+失败记录保存有界的宿主错误码、kind、HTTP 状态和发送状态，不保存原始错误正文或凭据。“容量类错误”可能来自队列、限流或响应缓冲，不等于机器内存或真实上游容量不足。旧记录只有 capacity 时无法补回已经丢失的底层原因，应保留原记录。
 
 ## 结果含义
 
@@ -83,7 +89,7 @@ npm --prefix frontend ci
 npm --prefix frontend run build
 npm --prefix frontend run test:ui
 python scripts/verify_sources.py
-python scripts/check_package.py dist/cloudops.codex-candy-eval-1.1.1-x86_64-unknown-linux-gnu.tar.gz
+python scripts/check_package.py dist/cloudops.codex-candy-eval-1.1.2-x86_64-unknown-linux-gnu.tar.gz
 ```
 
 GitHub Actions 检查模板位于 `ci/github-actions.yml`，覆盖固定来源、Rust 和前端检查。发布时使用的 GitHub 凭据不含 `workflow` 权限，因此模板暂未启用；取得该权限后可将它放入 `.github/workflows/check.yml`。

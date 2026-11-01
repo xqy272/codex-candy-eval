@@ -41,7 +41,7 @@ class Mock(http.server.BaseHTTPRequestHandler):
     calls=[];lock=threading.Lock();closed=0
     def log_message(self,*args):pass
     def do_GET(self):
-        data=json.dumps({'object':'list','data':[{'id':n,'object':'model','owned_by':'fixture'}for n in ['eval-candy','eval-fp','eval-pelican','eval-error','eval-incomplete','eval-slow']]}).encode()
+        data=json.dumps({'object':'list','data':[{'id':n,'object':'model','owned_by':'fixture'}for n in ['eval-candy','eval-fp','eval-pelican','eval-error','eval-incomplete','eval-slow','eval-large']]}).encode()
         self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',len(data));self.end_headers();self.wfile.write(data)
     def do_POST(self):
         body=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))))
@@ -64,6 +64,9 @@ class Mock(http.server.BaseHTTPRequestHandler):
         response={'id':rid,'object':'response','status':'completed','model':model,'output':[item],'usage':{'input_tokens':20,'output_tokens':5,'total_tokens':25,'input_tokens_details':{'cached_tokens':0},'output_tokens_details':{'reasoning_tokens':0}}}
         events=[('response.created',{'response':dict(response,status='in_progress',output=[])}),('response.output_item.added',{'output_index':0,'item':dict(item,status='in_progress',content=[])}),('response.content_part.added',{'item_id':mid,'output_index':0,'content_index':0,'part':{'type':'output_text','text':'','annotations':[]}}),('response.output_text.delta',{'item_id':mid,'output_index':0,'content_index':0,'delta':text}),('response.output_text.done',{'item_id':mid,'output_index':0,'content_index':0,'text':text}),('response.output_item.done',{'output_index':0,'item':item})]
         if model!='eval-incomplete':events.append(('response.completed',{'response':response}))
+        if model=='eval-large':
+            large=[('response.output_text.delta',{'item_id':mid,'output_index':0,'content_index':0,'delta':'','fixture_padding':'r'*8192}) for _ in range(800)]
+            events=events[:3]+large+events[3:]
         data=''.join('event: '+kind+'\ndata: '+json.dumps(dict(type=kind,**payload))+'\n\n'for kind,payload in events).encode()
         self.send_response(200);self.send_header('Content-Type','text/event-stream');self.send_header('Content-Length',len(data));self.end_headers()
         try:

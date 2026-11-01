@@ -13,7 +13,7 @@ const comparison = computed(() => {
   return normalize(props.record.model) === normalize(a.prediction) ? '首位候选与所选模型的参考库映射一致' : '首位候选与所选模型的参考库映射不同'
 })
 const totalUsage = computed(() => props.record.samples.reduce((sum, sample) => { for (const [key,value] of Object.entries(sample.answer?.usage ?? {})) if (typeof value === 'number') sum[key] = (sum[key] ?? 0) + value; return sum }, {} as Record<string, number>))
-const sampleLabels: Record<string, string> = { completed: '完整完成', cancelled: '已取消', timeout: '超时', execution_failed: '宿主执行失败', incomplete: '响应不完整或超出上限', invalid_request: '请求无效', answer_too_large: '回答超过 48 KiB 上限', empty_answer: '没有可用文本', invalid_events: '宿主事件格式无效', permission_denied: 'Key 权限或账号资格拒绝', capacity: '宿主容量限制' }
+const sampleLabels: Record<string, string> = { completed: '完整完成', cancelled: '已取消', timeout: '超时', execution_failed: '宿主执行失败', incomplete: '响应不完整或超出上限', invalid_request: '请求无效', answer_too_large: '回答超过 48 KiB 上限', empty_answer: '没有可用文本', invalid_events: '宿主事件格式无效', permission_denied: 'Key 权限或账号资格拒绝', capacity: '宿主返回容量类错误（具体原因未提供）', queue_full: '宿主并发等待队列已满', queue_timeout: '宿主并发排队超时', account_capacity: '所选账号没有可用并发容量', rate_limited: '宿主限流', no_provider: '没有可用 Provider', response_buffer_limit: '整轮响应超过宿主缓冲上限', event_too_large: '单个事件超过宿主分块上限' }
 const preview = computed(() => {
   if (props.record.kind !== 'pelican' || props.record.status !== 'completed') return ''
   const text = props.record.samples[0]?.answer?.text ?? ''
@@ -47,6 +47,7 @@ const preview = computed(() => {
       <summary>回答 {{ i + 1 }} · {{ sampleLabels[sample.status] ?? sample.status }} · {{ (sample.durationMs / 1000).toFixed(1) }} 秒</summary>
       <p v-if="record.attribution?.diagnostics?.[i]" class="muted">解析到 {{ record.attribution.diagnostics[i].parsed_numbers }} 个有效数字 / 预期 {{ sample.expectedCount }} 个 · {{ record.attribution.diagnostics[i].accepted ? '样本可用' : '样本不足' }}</p>
       <pre>{{ sample.answer?.text ?? '未取得完整回答' }}</pre>
+      <p v-if="sample.error" class="muted">宿主错误码：{{ sample.error.code }} · 分类：{{ sample.error.kind || '未提供' }} · HTTP：{{ sample.error.httpStatus ?? '未提供' }} · 发送状态：{{ sample.error.sendState ?? '未知' }}</p>
       <p class="muted">请求 ID：{{ sample.requestId ?? '未知' }}</p>
       <details><summary>测试题目</summary><pre v-if="sample.instructions">{{ sample.instructions }}</pre><pre>{{ sample.prompt }}</pre></details>
     </details>

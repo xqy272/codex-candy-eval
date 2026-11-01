@@ -54,3 +54,18 @@ node integration/browser.mjs
 ```
 
 脚本覆盖原版 1.0.0 在真实 3.35.1 建立历史、同库升级 3.36.0、复现切换 1.1.0 冲突及停用后仍冲突、迁移 1.1.1 保留历史、新版写入与重新启用，以及独立 1.1.0 实例的摘要和详情保留。全部模型请求只到本地受控上游。
+
+## 大响应缓冲回归
+
+在空白隔离宿主执行：
+
+```bash
+python integration/native_client.py --baseline dist/cloudops.codex-candy-eval-1.1.1-x86_64-unknown-linux-gnu.tar.gz
+python integration/streaming.py
+python integration/business.py
+python integration/lifecycle.py
+python integration/optimization.py
+node integration/browser.mjs
+```
+
+streaming.py 对同一受控大事件响应，先验证旧发布包返回 capacity 且无请求 ID，再切换当前版验证完整答案、终态、usage 和请求 ID。不会调用真实模型。测试的原始事件总量较大，但单个事件和最终文本均保持在限定范围内。

@@ -1,6 +1,6 @@
 export interface Account { account_id: string; name: string; email: string | null; enabled: boolean }
 export interface ClientKey { id: string; name: string; enabled: boolean }
-export interface Sample { status: string; prompt: string; instructions: string; expectedCount: number | null; requestId: string | null; answer: { text: string; usage: Record<string, number | null> } | null; durationMs: number }
+export interface Sample { error?: { code: string; kind?: string | null; httpStatus?: number | null; sendState?: string }; status: string; prompt: string; instructions: string; expectedCount: number | null; requestId: string | null; answer: { text: string; usage: Record<string, number | null> } | null; durationMs: number }
 export interface RecordEntry {
   summaryOnly?: boolean; id: string; accountId: string; kind: string; model: string; effort: string; status: string
   requestProfile?: string; startedAt: number; durationMs: number; samples: Sample[]; detectorVersion: string; expectedSamples?: number; gradingAnswer?: number

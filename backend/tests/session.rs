@@ -22,6 +22,7 @@ struct Host {
     details: std::collections::HashMap<String, (Value, u64)>,
     version: u64,
     executes: usize,
+    fail_stream: bool,
     consumed: Vec<u64>,
 }
 impl Host {
@@ -52,6 +53,7 @@ impl Host {
             details: Default::default(),
             version: 0,
             executes: 0,
+            fail_stream: false,
             consumed: vec![],
         };
         this.send(Frame::control(Message::Hello {
@@ -161,7 +163,7 @@ impl Host {
                     {
                         self.detail_callback(id, &method, &params, save).await
                     }
-                    "host.model.execute" => {
+                    "host.model.execute_stream" => {
                         self.executes += 1;
                         assert_eq!(params["account_id"], "account-test");
                         assert_eq!(params["client_key_id"], "key-test");
@@ -174,6 +176,28 @@ impl Host {
                             assert!(body["input"].as_array().unwrap().len() > 3);
                         }
                         assert!(body["instructions"].is_string());
+                        self.reply(
+                            id,
+                            json!({"request_id":"request-test","stream":"stream-test"}),
+                            vec![],
+                        )
+                        .await;
+                    }
+                    "host.model.stream_close" => {
+                        self.reply(id, json!({"closed":true}), vec![]).await;
+                    }
+                    "host.model.stream_read" if self.fail_stream => {
+                        let mut error = gateway_plugin_sdk::PluginFault::new(
+                            gateway_plugin_sdk::ErrorCode::Capacity,
+                            "not shown",
+                        );
+                        error.details = Some(
+                            json!({"kind":"concurrency_queue_timeout","raw_secret":"must never persist"}),
+                        );
+                        self.send(Frame::control(Message::Error { id, error }))
+                            .await;
+                    }
+                    "host.model.stream_read" => {
                         let mut events =
                             vec![ExecutionEvent::canonical(CanonicalEvent::TextDelta {
                                 index: 0,
@@ -189,7 +213,7 @@ impl Host {
                         let count = events.len();
                         self.reply(
                             id,
-                            json!({"request_id":"request-test","events":count}),
+                            json!({"events":count,"end":true}),
                             ModelEventBatch { events }.encode().unwrap(),
                         )
                         .await;
@@ -262,7 +286,7 @@ impl Host {
                         self.reply(id, json!({"version":self.version}), vec![])
                             .await;
                     }
-                    "host.model.execute" => return id,
+                    "host.model.execute_stream" => return id,
                     _ => panic!("unexpected callback {method}"),
                 },
                 other => panic!("unexpected frame {other:?}"),
@@ -500,5 +524,21 @@ async fn legacy_inline_history_remains_readable_without_reexecution() {
         "correct"
     );
     assert_eq!(host.executes, 0);
+    host.shutdown().await;
+}
+
+#[tokio::test]
+async fn stream_failure_preserves_request_id_and_safe_classification() {
+    let mut host = Host::start().await;
+    host.fail_stream = true;
+    host.call(1, "api/run", Some(run("stream-failure", "fingerprint")))
+        .await;
+    let result = host.result(1, "", false, true).await.1;
+    let sample = &result["record"]["samples"][0];
+    assert_eq!(sample["requestId"], "request-test");
+    assert_eq!(sample["status"], "queue_timeout");
+    assert_eq!(sample["error"]["kind"], "concurrency_queue_timeout");
+    assert!(!result.to_string().contains("must never persist"));
+    assert!(result["nextStep"].is_null());
     host.shutdown().await;
 }

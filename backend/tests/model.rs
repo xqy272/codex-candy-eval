@@ -58,3 +58,53 @@ fn rejects_oversized_and_malformed_output() {
     ]));
     assert!(decode(b"HTTP 200").is_err());
 }
+
+#[test]
+fn incremental_decode_discards_large_wire_history_but_keeps_terminal_validation() {
+    let mut decoder = cpr_candy_eval::model::Decoder::default();
+    for _ in 0..1200 {
+        let wire = ExecutionEvent::wire(WireEvent {
+            protocol: "openai".into(),
+            payload: WirePayload::Json {
+                event: Some("response.reasoning_summary_text.delta".into()),
+                data: json!({"delta":"r".repeat(8192)}),
+                id: None,
+                retry: None,
+                raw_sse: None,
+            },
+        });
+        decoder
+            .push(&ModelEventBatch { events: vec![wire] }.encode().unwrap())
+            .unwrap();
+    }
+    decoder
+        .push(
+            &ModelEventBatch {
+                events: vec![text("21")],
+            }
+            .encode()
+            .unwrap(),
+        )
+        .unwrap();
+    decoder
+        .push(
+            &ModelEventBatch {
+                events: vec![done(FinishReason::Stop)],
+            }
+            .encode()
+            .unwrap(),
+        )
+        .unwrap();
+    assert_eq!(decoder.finish().unwrap().text, "21");
+    let mut unfinished = cpr_candy_eval::model::Decoder::default();
+    unfinished
+        .push(
+            &ModelEventBatch {
+                events: vec![text("21")],
+            }
+            .encode()
+            .unwrap(),
+        )
+        .unwrap();
+    assert!(unfinished.finish().is_err());
+}

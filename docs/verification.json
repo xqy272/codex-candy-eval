@@ -45,5 +45,50 @@
     "rust_tests_passed": 16,
     "migration_evidence": "migration-1.1.1.json",
     "native_ui_passed": true
+  },
+  "streaming_fix": {
+    "version": "1.1.2",
+    "observed_date": "2026-11-01",
+    "archive_sha256": "5d13be2f8e77d2b43f285520e417beac90def185027db77b70a4323c06f157df",
+    "rust_tests_passed": 18,
+    "ui_tests_passed": 8,
+    "native_checks": {
+      "business": [
+        "Current package accepted and native instance running",
+        "Previously persisted history retained",
+        "Candy 21 grading, complete terminal, usage and persisted record",
+        "Duplicate completed submission does not execute upstream again",
+        "Three distinct fingerprint prompts, per-step persistence and offline ranking",
+        "Pelican generation and original SVG answer preservation",
+        "HTTP error and missing response.completed are recorded as failures",
+        "Global mutual exclusion, cancellation, request release and journal retention",
+        "Cancellation between samples preserves progress without another model call",
+        "Unavailable selected account is rejected without falling back to another account",
+        "Disable and re-enable invalidate old page and retain private history"
+      ],
+      "lifecycle": [
+        "Key account scope enforced and selected account confirmed by Core attempt facts",
+        "Runtime replacement preserves an interrupted intent and does not replay uncertain work",
+        "Version rollback and return retain compatible private state",
+        "History retention bound and unique record replacement under repeated use"
+      ],
+      "optimization": [
+        "Pinned Codex context passes through real Core with tool execution disabled",
+        "History list contains summaries and detail route retrieves the original response",
+        "Reusing an execution ID with a different request profile is rejected",
+        "Per-account retention preserves another account through 21 new runs",
+        "Scoped history clearing removes detail data and preserves unrelated account records"
+      ]
+    },
+    "native_page_checks": [
+      "Native iframe loading and host resource/CSP assembly",
+      "Candy bridge and JSON export",
+      "Three-step fingerprint and ranking",
+      "SVG preview",
+      "History after page reload",
+      "Host dark theme and narrow layout"
+    ],
+    "large_event_evidence": "streaming-1.1.2.json",
+    "original_production_failure_cause": "Not recoverable from legacy generic capacity record"
   }
 }

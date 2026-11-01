@@ -3,7 +3,10 @@ use crate::{history, management::AppState, model, prompts};
 use gateway_plugin_sdk::{
     ErrorCode, PluginFault,
     call::{
-        host::{ModelExecuteRequest, ModelExecuteResult, ModelOperation},
+        host::{
+            ModelExecuteRequest, ModelOperation, ModelStreamCloseRequest, ModelStreamReadRequest,
+            ModelStreamReadResult, ModelStreamResult,
+        },
         management::ManagementRequest,
     },
     client::TypedCall,
@@ -65,6 +68,7 @@ struct Sample {
     status: String,
     answer: Option<model::Answer>,
     duration_ms: u64,
+    error: Option<Value>,
 }
 #[derive(Deserialize)]
 struct Challenge {
@@ -121,6 +125,7 @@ async fn ask(
     req: &RunRequest,
     p: &Planned,
     cancel: &mut watch::Receiver<bool>,
+    diagnostic: &mut Option<Value>,
 ) -> Result<(String, model::Answer), (Option<String>, &'static str)> {
     if *cancel.borrow() {
         return Err((None, "cancelled"));
@@ -166,29 +171,114 @@ async fn ask(
         operation: ModelOperation::Generate,
         previous_response_id: None,
     };
-    // 150 秒先于宿主页面的 180 秒超时，预留终态保存与回传时间。
-    let reply: Result<(ModelExecuteResult, Vec<u8>), PluginFault> = tokio::select! {
-        biased;
-        _=call.cancellation.cancelled()=>return Err((None,"cancelled")),
-        _=cancel.changed()=>return Err((None,"cancelled")),
-        _=tokio::time::sleep(Duration::from_secs(150))=>return Err((None,"timeout")),
-        result=history::callback(&call.host,"host.model.execute",metadata,serde_json::to_vec(&body).map_err(|_|(None,"invalid_request"))?)=>result,
-    };
-    let (meta, payload) = reply.map_err(|error| {
-        (
-            None,
-            match error.code {
-                ErrorCode::PermissionDenied | ErrorCode::Rejected => "permission_denied",
-                ErrorCode::Timeout => "timeout",
-                ErrorCode::Capacity => "capacity",
-                ErrorCode::Cancelled => "cancelled",
-                _ => "execution_failed",
-            },
+    // 同一父调用内拉取有界分块，不累计 reasoning/wire 等整轮原始事件
+    let mut request_id = None;
+    let mut stream_id = None;
+    let execution = async {
+        let (started, _): (ModelStreamResult, _) = history::callback(
+            &call.host,
+            "host.model.execute_stream",
+            metadata,
+            serde_json::to_vec(&body).map_err(|_| "invalid_request")?,
         )
-    })?;
-    let answer =
-        model::decode(&payload).map_err(|reason| (Some(meta.request_id.clone()), reason))?;
-    Ok((meta.request_id, answer))
+        .await
+        .map_err(|e| {
+            let detail=e.details.as_ref();
+            let bounded=|name:&str|detail.and_then(|d|d.get(name)).and_then(Value::as_str).filter(|v|v.len()<=128 && v.chars().all(|c|c.is_ascii_alphanumeric() || "_-.:".contains(c)));
+            *diagnostic=Some(json!({"code":e.code,"kind":bounded("kind"),"upstreamCode":bounded("code"),"httpStatus":e.http_status,"sendState":e.send_state}));
+            failure_kind(&e)
+        })?;
+        request_id = Some(started.request_id);
+        stream_id = Some(started.stream.clone());
+        let mut decoder = model::Decoder::default();
+        loop {
+            let (chunk, payload): (ModelStreamReadResult, _) = history::callback(
+                &call.host,
+                "host.model.stream_read",
+                ModelStreamReadRequest {
+                    stream: started.stream.clone(),
+                    maximum_bytes: 1024 * 1024,
+                },
+                vec![],
+            )
+            .await
+            .map_err(|e| {
+            let detail=e.details.as_ref();
+            let bounded=|name:&str|detail.and_then(|d|d.get(name)).and_then(Value::as_str).filter(|v|v.len()<=128 && v.chars().all(|c|c.is_ascii_alphanumeric() || "_-.:".contains(c)));
+            *diagnostic=Some(json!({"code":e.code,"kind":bounded("kind"),"upstreamCode":bounded("code"),"httpStatus":e.http_status,"sendState":e.send_state}));
+            failure_kind(&e)
+        })?;
+            if !payload.is_empty() {
+                decoder.push(&payload)?;
+            }
+            if chunk.end {
+                break;
+            }
+        }
+        let facts = decoder.diagnostic();
+        decoder.finish().inspect_err(|_| {
+            *diagnostic = Some(facts);
+        })
+    };
+    let result = tokio::select! {
+        biased;
+        _=call.cancellation.cancelled()=>Err("cancelled"),
+        _=cancel.changed()=>Err("cancelled"),
+        _=tokio::time::sleep(Duration::from_secs(150))=>Err("timeout"),
+        result=execution=>result,
+    };
+    if let Some(stream) = stream_id {
+        // 正常 EOF、错误、用户取消均显式关闭；父取消由宿主再次兜底回收
+        let _ = tokio::time::timeout(
+            Duration::from_secs(2),
+            history::callback::<_, serde_json::Value>(
+                &call.host,
+                "host.model.stream_close",
+                ModelStreamCloseRequest { stream },
+                vec![],
+            ),
+        )
+        .await;
+    }
+    match result {
+        Ok(answer) => Ok((request_id.unwrap_or_default(), answer)),
+        Err(reason) => Err((request_id, reason)),
+    }
+}
+
+pub fn failure_kind(error: &PluginFault) -> &'static str {
+    let kind = error
+        .details
+        .as_ref()
+        .and_then(|d| d.get("kind"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    match kind {
+        "concurrency_queue_full" => "queue_full",
+        "concurrency_queue_timeout" => "queue_timeout",
+        "account_capacity_unavailable" => "account_capacity",
+        "rate_limited" => "rate_limited",
+        "no_available_provider" => "no_provider",
+        _ => match error.code {
+            ErrorCode::PermissionDenied | ErrorCode::Rejected => "permission_denied",
+            ErrorCode::Timeout => "timeout",
+            ErrorCode::Cancelled => "cancelled",
+            ErrorCode::Capacity
+                if error.message == "model response requires streaming"
+                    || error.message == "model event batch is too large" =>
+            {
+                "response_buffer_limit"
+            }
+            ErrorCode::Capacity
+                if error.message == "model event exceeds the requested read size"
+                    || error.message == "model event exceeds the stream payload limit" =>
+            {
+                "event_too_large"
+            }
+            ErrorCode::Capacity => "capacity",
+            _ => "execution_failed",
+        },
+    }
 }
 
 pub async fn run(
@@ -255,12 +345,14 @@ pub async fn run(
     record["pendingStep"] = json!(req.step);
     // 先落执行意图再发请求，中断后保留已完成样本，不推测上游是否消费。
     history::append(&call.host, record.clone()).await?;
-    let result = ask(call, &req, &planned, &mut cancel).await;
+    let mut diagnostic = None;
+    let result = ask(call, &req, &planned, &mut cancel, &mut diagnostic).await;
     let (status, request_id, answer) = match result {
         Ok((id, a)) => ("completed", Some(id), Some(a)),
         Err((id, s)) => (s, id, None),
     };
     let sample = Sample {
+        error: diagnostic,
         prompt: planned.prompt,
         instructions: planned.instructions,
         expected_count: planned.expected_count,
