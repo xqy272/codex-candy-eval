@@ -27,6 +27,10 @@ class Client:
   return result.get('data',result)
  def extension(self):
   views=self.api('/api/admin/plugins/extensions')
+  if (WORK/'state.json').exists():
+   selected=json.loads((WORK/'state.json').read_text()).get('instanceId')
+   matching=[v for v in views if v['target']['instanceId']==selected]
+   if matching:return matching[0]
   return next(v for v in views if any(p['id']=='codex-candy-eval'for p in v['pages']))
  def route(self,path,data=None,timeout=45):
   t=self.extension()['target'];prefix='/api/admin/plugins/extensions/'+t['instanceId']+'/'+t['artifactSha256']+'/'+str(t['revision'])+'/api/'
@@ -44,7 +48,7 @@ if __name__=='__main__':
  args=parser.parse_args()
  client=Client()
  if client.api('/api/admin/accounts')['items']:raise RuntimeError('测试宿主必须没有既有账号')
- old=args.baseline or ROOT/'dist/cloudops.codex-candy-eval-1.1.2-x86_64-unknown-linux-gnu.tar.gz'
+ old=args.baseline or ROOT/'dist/cloudops.codex-candy-eval-1.2.0-x86_64-unknown-linux-gnu.tar.gz'
  installed,digest=client.install(old)
  instances=client.api('/api/admin/plugins/instances')
  print('Verified and installed baseline; instance status:',[(v['enabled'],v['running'],v['loadError'])for v in instances if v['artifactSha256']==digest])

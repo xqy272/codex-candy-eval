@@ -1,0 +1,24 @@
+{
+  "host": "3.38.2",
+  "archive_sha256": "eb4d96089629c3964cf8c83e308804d43cd6ce8af9c144ced455ffdb2f338e93",
+  "checks": [
+    "Current archive loads on native host",
+    "Existing private state retained",
+    "Account and Key catalog",
+    "Model catalog",
+    "Idempotent candy submission and answer 21",
+    "Three-sample background fingerprint and ranking"
+  ],
+  "results": [
+    {
+      "kind": "candy",
+      "verdict": "correct",
+      "validSamples": 1
+    },
+    {
+      "kind": "fingerprint",
+      "verdict": "ranked",
+      "validSamples": 3
+    }
+  ]
+}

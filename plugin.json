@@ -3,17 +3,20 @@
   "name": "codex-candy-eval",
   "publisher": "cloudops",
   "displayName": "Codex 账号测试",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "糖果题、模型指纹和画鹈鹕测试",
   "license": "MIT",
   "engines": {
-    "codex-proxy-rs": ">=3.36.0, <3.37.0"
+    "codex-proxy-rs": ">=3.36.0, <3.39.0"
   },
   "main": "bin/plugin",
   "runtime": "trustedProcess",
   "contributes": {
     "management": {
       "version": 2
+    },
+    "maintenance": {
+      "version": 1
     }
   },
   "configurationSchema": {
@@ -80,6 +83,39 @@
       },
       "maximumRecords": 256,
       "maximumBytes": 16777216,
+      "maximumValueBytes": 262144,
+      "migratesFrom": []
+    },
+    {
+      "namespace": "tasks",
+      "schemaVersion": 1,
+      "schema": {
+        "type": "object"
+      },
+      "maximumRecords": 128,
+      "maximumBytes": 4194304,
+      "maximumValueBytes": 262144,
+      "migratesFrom": []
+    },
+    {
+      "namespace": "samples",
+      "schemaVersion": 1,
+      "schema": {
+        "type": "object"
+      },
+      "maximumRecords": 1024,
+      "maximumBytes": 16777216,
+      "maximumValueBytes": 262144,
+      "migratesFrom": []
+    },
+    {
+      "namespace": "queue",
+      "schemaVersion": 1,
+      "schema": {
+        "type": "object"
+      },
+      "maximumRecords": 1,
+      "maximumBytes": 262144,
       "maximumValueBytes": 262144,
       "migratesFrom": []
     }

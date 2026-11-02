@@ -1,71 +1,40 @@
-# 真实 CPR 集成验收
+# 隔离 CPR 验收
 
-这些脚本启动独立数据库、Redis、CPR 和本机受控上游，用假账号执行完整流程。不会访问真实模型。临时宿主只监听 `127.0.0.1:18380`，数据库和 Redis 使用 15432/16379，受控上游使用 18381；运行前这些端口应空闲。
+run_host.py 只在本机启动临时 PostgreSQL、Redis、官方 CPR 和受控 Responses 上游。默认不用生产账号或真实模型。端口为 18380、18381、15432、16379，运行前应空闲。退出后会停止自建进程、删除临时数据库及控制凭据。
 
-已验证环境：Ubuntu 24.04 / WSL2，官方 CPR v3.36.0 Linux amd64 发行包，PostgreSQL 16.15、Redis 7.0.15；浏览器为本机 Chrome。数据库和账号是每次新建的隔离测试资源，不复用生产配置。插件不自行访问 SQL 或 Redis，持久化通过 CPR 公开 SDK。
-
-先从官方 v3.36.0 Release 下载并按 `checksums.txt` 验证 Linux amd64 发行包，解压后将含 `codex-proxy-rs` 可执行文件与 `web/dist` 的目录作为 `/path/to/cpr`，保留其 `web/dist`。准备 PostgreSQL 与 Redis 程序；Ubuntu 24.04 可用以下脚本只下载并解压测试程序，不安装或启动系统服务：
+从官方 Release 下载 CPR Linux amd64 包并核对 checksums.txt，将含 codex-proxy-rs 与 web/dist 的目录传入 --cpr-dir。数据库工具可通过 prepare-ubuntu-tools.sh 下载解包，不安装系统服务。
 
 ```bash
-bash integration/prepare-ubuntu-tools.sh
+python3 integration/run_host.py --cpr-dir /path/to/cpr \
+  --postgres-bin /path/to/tools/usr/lib/postgresql/16/bin \
+  --redis-server /path/to/tools/usr/bin/redis-server \
+  --library-dir /path/to/tools/usr/lib/x86_64-linux-gnu
 ```
 
-启动宿主并保持该进程运行：
+看到 ready 后，在另一个终端执行：
 
 ```bash
-python3 integration/run_host.py \
-  --cpr-dir /path/to/cpr \
-  --postgres-bin "$PWD/.runtime/integration-deps/tools/usr/lib/postgresql/16/bin" \
-  --redis-server "$PWD/.runtime/integration-deps/tools/usr/bin/redis-server" \
-  --library-dir "$PWD/.runtime/integration-deps/tools/usr/lib/x86_64-linux-gnu"
-```
-
-也可指向已准备好的测试程序。不要解析 Redis 可执行文件的符号链接后再传入，其运行模式依赖程序名。
-
-出现 ready 后，在项目根目录的另一终端执行：
-
-```bash
-python integration/native_client.py
-python integration/business.py
-python integration/lifecycle.py
-python integration/optimization.py
-python integration/optimization.py
+# 在 CPR 3.36 上使用真实旧包建立历史，然后原实例升级
+python integration/native_client.py --baseline /path/to/1.1.2.tar.gz
+python integration/compatibility.py
+python integration/tasks.py
 node integration/browser.mjs
 ```
 
-`native_client.py` 要求测试宿主没有既有账号。可用 `--baseline /path/to/older-plugin.tar.gz` 安装兼容旧版本，随后验证升级和回滚；省略时安装当前包，不执行需要两个不同版本的回退用例。
+新宿主也可省略 --baseline，直接安装当前包。tasks.py 会明确区分原实例升级与当前包直接安装。compatibility.py 对最终归档验证账号与 Key、模型目录、旧状态、幂等糖果和完整三样本指纹，报告保存在 docs/compatibility-VERSION.json。
 
-浏览器脚本需要先在 `frontend` 执行 `npm ci`，并有本机 Chrome。Windows 可连接在同机 WSL 启动的宿主；在 Windows 项目目录执行客户端和浏览器命令即可。
+tasks.py 覆盖后台执行、重复提交、三份固定题目、SVG 输出、大事件流、失败暂停、无效样本、手动续测、取消、进程替换的未知消费、Key 作用域和删除。受控上游计数用于检查插件是否重复请求，不与上游 attempt 或真实用户 turn 混淆。
 
-覆盖的行为包括：安装加载、账号/模型目录、糖果判分和用量、三题指纹、SVG 原文与预览、错误与缺失终态、重复提交、取消和账号租约释放、题间取消、禁止换号、Key 范围与实际账号核对、运行时替换中断、历史保留、版本回退、原生页面刷新及深色窄屏。
+browser.mjs 读取已完成任务，通过真实宿主 iframe 与 CSP 检查报告、完整证据导出、刷新、主题和窄屏。需要本机 Chrome 与 frontend 的依赖。Windows 连接 WSL 回环可能需要相应进程权限。
 
-结果、截图及临时控制信息保存在忽略提交的 `.runtime/integration/`。退出宿主进程，或创建该目录下的 `stop` 文件，会停止自建进程并清理临时数据库与控制凭据。测试报告和截图保留。Key、密码和 Cookie 不写入验收报告。
+旧的 business.py、lifecycle.py 和 optimization.py 保留同步接口与旧历史的回归；不代表新版页面仍驱动逐题执行。migration.py 是 1.1.1 的历史故障复现，不是 1.2 的默认验收入口。
 
-## 旧状态升级回归
+真实模型验收必须另外明确授权、固定请求预算及凭据处理范围。测试数据和控制信息保存在忽略的 .runtime/integration；不得把凭据、数据库或原始用户回答整体提交。公开证据只保留必要的次数、状态、样本有效性和有界汇总。
 
-使用空白测试数据库，启动参数将 `--cpr-dir` 指向官方 3.35.1 的程序目录，并传 `--upgrade-cpr-dir /path/to/3.36.0`。这仅在测试目录出现 `upgrade-host` 标记时停止临时 CPR 应用并以新版重启；PG、Redis 和测试数据保持。
+## 同库版本矩阵
 
-将已发布的 1.0.0、1.1.0 和当前 1.1.1 包放在 dist，执行：
+验证原始 1.0.0 时，先在 CPR 3.35.1 启动，传 --upgrade-cpr-dir 指向 3.36.0。准备原始 1.0.0 与 1.1.2 发布包到 dist 后，运行 native_client.py --baseline 指向 1.0.0，再运行 upgrade-current.py。宿主同一插件只允许一个启用实例，脚本会停用先前测试实例，再独立验证 1.1.2 升级。
 
-```bash
-python integration/native_client.py --baseline dist/cloudops.codex-candy-eval-1.0.0-x86_64-unknown-linux-gnu.tar.gz
-python integration/migration.py
-node integration/browser.mjs
-```
+run_host.py 可以重复传 --matrix-cpr-dir 注册 3.37.2 与 3.38.2 测试程序目录。依次运行 switch-host.py 0 3.37.2、compatibility.py、switch-host.py 1 3.38.2、compatibility.py，再执行 tasks.py 与 browser.mjs。只切换启动时注册的程序，同一临时数据库保持；不要对生产目录使用这些脚本。
 
-脚本覆盖原版 1.0.0 在真实 3.35.1 建立历史、同库升级 3.36.0、复现切换 1.1.0 冲突及停用后仍冲突、迁移 1.1.1 保留历史、新版写入与重新启用，以及独立 1.1.0 实例的摘要和详情保留。全部模型请求只到本地受控上游。
-
-## 大响应缓冲回归
-
-在空白隔离宿主执行：
-
-```bash
-python integration/native_client.py --baseline dist/cloudops.codex-candy-eval-1.1.1-x86_64-unknown-linux-gnu.tar.gz
-python integration/streaming.py
-python integration/business.py
-python integration/lifecycle.py
-python integration/optimization.py
-node integration/browser.mjs
-```
-
-streaming.py 对同一受控大事件响应，先验证旧发布包返回 capacity 且无请求 ID，再切换当前版验证完整答案、终态、usage 和请求 ID。不会调用真实模型。测试的原始事件总量较大，但单个事件和最终文本均保持在限定范围内。
+compatibility.py 保存当前运行目录与实际观测版本。tasks.py 使用该快照并逐项保存进度，避免结束时刷新系统版本失败而丢失已通过的检查。cancellation.py 额外观察真实 Core 租约出现，再确认停止后归零。

@@ -1,0 +1,10 @@
+{
+  "archive_sha256": "eb4d96089629c3964cf8c83e308804d43cd6ce8af9c144ced455ffdb2f338e93",
+  "checks": [
+    "Actual host iframe/CSP and bridge",
+    "Persisted fingerprint ranking and complete evidence export",
+    "Reload retains history without request replay",
+    "Host dark theme and 390px layout"
+  ],
+  "errors": []
+}

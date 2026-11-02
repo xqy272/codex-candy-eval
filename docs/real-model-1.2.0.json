@@ -1,0 +1,110 @@
+{
+  "observed_at": "2026-11-02T08:32:50.237888+00:00",
+  "archive_sha256": "eb4d96089629c3964cf8c83e308804d43cd6ce8af9c144ced455ffdb2f338e93",
+  "host": "3.38.2",
+  "model": "gpt-6.1-sol",
+  "plugin_requests_observed": 4,
+  "maximum_authorized": 4,
+  "automatic_plugin_retries": 0,
+  "results": [
+    {
+      "kind": "candy",
+      "status": "completed",
+      "reason": null,
+      "verdict": "correct",
+      "valid_samples": 1,
+      "expected_samples": 1,
+      "attempts": [
+        {
+          "status": "completed",
+          "valid": true,
+          "response_completed": true,
+          "has_request_id": true,
+          "duration_ms": 49143,
+          "text_bytes": 1352,
+          "text_sha256": "29a7554209964074e7a4348f3d4bad67bb5f061f5ee034bf449f78e0d09f0313",
+          "usage": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_input_tokens": 0,
+            "image_output_tokens": 0,
+            "input_tokens": 219,
+            "output_tokens": 1063,
+            "reasoning_tokens": 652,
+            "total_tokens": 1282
+          }
+        }
+      ],
+      "scoring_decision": null
+    },
+    {
+      "kind": "fingerprint",
+      "status": "completed",
+      "reason": null,
+      "verdict": "ranked",
+      "valid_samples": 3,
+      "expected_samples": 3,
+      "attempts": [
+        {
+          "status": "completed",
+          "valid": true,
+          "response_completed": true,
+          "has_request_id": true,
+          "duration_ms": 45240,
+          "text_bytes": 882,
+          "text_sha256": "c591d98d07ad6ecfbb85487ebfffcefd6a9b77aaaa4c3e40ce36a79a81f434b2",
+          "usage": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_input_tokens": 0,
+            "image_output_tokens": 0,
+            "input_tokens": 139,
+            "output_tokens": 1083,
+            "reasoning_tokens": 598,
+            "total_tokens": 1222
+          }
+        },
+        {
+          "status": "completed",
+          "valid": true,
+          "response_completed": true,
+          "has_request_id": true,
+          "duration_ms": 43421,
+          "text_bytes": 1363,
+          "text_sha256": "0a9fe3e26fa651238464d871494dd706b0d83d331a8135b0816a18f9db054b61",
+          "usage": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_input_tokens": 0,
+            "image_output_tokens": 0,
+            "input_tokens": 146,
+            "output_tokens": 931,
+            "reasoning_tokens": 62,
+            "total_tokens": 1077
+          }
+        },
+        {
+          "status": "completed",
+          "valid": true,
+          "response_completed": true,
+          "has_request_id": true,
+          "duration_ms": 42478,
+          "text_bytes": 1371,
+          "text_sha256": "79b242368c2b90079d7409d43a5404d623e3f135dafb6a524f2a1245b04fefc6",
+          "usage": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_input_tokens": 0,
+            "image_output_tokens": 0,
+            "input_tokens": 310,
+            "output_tokens": 987,
+            "reasoning_tokens": 127,
+            "total_tokens": 1297
+          }
+        }
+      ],
+      "scoring_decision": "scored"
+    }
+  ],
+  "scope": "One end-to-end run; does not establish model identity accuracy"
+}

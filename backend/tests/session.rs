@@ -19,6 +19,11 @@ struct Host {
     writer: WriteHalf<DuplexStream>,
     task: JoinHandle<()>,
     saved: Option<Value>,
+    jobs: std::collections::HashMap<String, (Value, u64)>,
+    identity: String,
+    credential_revision: u64,
+    fail_task_save: bool,
+    failure_after: Option<usize>,
     details: std::collections::HashMap<String, (Value, u64)>,
     version: u64,
     executes: usize,
@@ -37,10 +42,10 @@ impl Host {
                 .await
                 .unwrap();
             session
-                .set_call_budgets(gateway_plugin_sdk::CallBudgets::from([(
-                    Stage::Management,
-                    600_000,
-                )]))
+                .set_call_budgets(gateway_plugin_sdk::CallBudgets::from([
+                    (Stage::Management, 600_000),
+                    (Stage::Maintenance, 600_000),
+                ]))
                 .unwrap();
             session.run(handler).await.unwrap();
         });
@@ -50,6 +55,11 @@ impl Host {
             writer,
             task,
             saved: None,
+            jobs: Default::default(),
+            identity: "user-test".into(),
+            credential_revision: 1,
+            fail_task_save: false,
+            failure_after: None,
             details: Default::default(),
             version: 0,
             executes: 0,
@@ -131,6 +141,33 @@ impl Host {
             request: None, call_id: id, instance_id: "test".into(), generation: 1, incarnation: "test".into(), stage: Stage::Management, timeout_ms: 600_000, resource_stream: false, resource_scope_id: format!("scope-{id}"), request_id: None, attempt_id: None, account_id: None, credential_revision: None,
         }, params: json!({"method":if data.is_some(){"POST"}else{"GET"},"path":path,"query":"","content_type":data.as_ref().map(|_|"application/json"),"headers":[]}) }, payload: data.map(|v|serde_json::to_vec(&v).unwrap()).unwrap_or_default() }).await;
     }
+
+    async fn maintenance(&mut self, id: u64, timeout_ms: u64) {
+        self.send(Frame {
+            message: Message::Call {
+                id,
+                method: "plugin.reconcile".into(),
+                context: CallContext {
+                    request: None,
+                    call_id: id,
+                    instance_id: "test".into(),
+                    generation: 1,
+                    incarnation: "test".into(),
+                    stage: Stage::Maintenance,
+                    timeout_ms,
+                    resource_stream: false,
+                    resource_scope_id: format!("scope-{id}"),
+                    request_id: None,
+                    attempt_id: None,
+                    account_id: None,
+                    credential_revision: None,
+                },
+                params: json!({}),
+            },
+            payload: vec![],
+        })
+        .await;
+    }
     async fn reply(&mut self, id: u64, result: Value, payload: Vec<u8>) {
         self.send(Frame {
             message: Message::Result { id, result },
@@ -151,13 +188,68 @@ impl Host {
                 Message::Result { id, result } => {
                     assert_eq!(id, expected);
                     return (
-                        result["status"].as_u64().unwrap(),
-                        serde_json::from_slice(&frame.payload).unwrap(),
+                        result["status"].as_u64().unwrap_or(0),
+                        if frame.payload.is_empty() {
+                            result.clone()
+                        } else {
+                            serde_json::from_slice(&frame.payload).unwrap()
+                        },
                     );
                 }
                 Message::Callback {
                     id, method, params, ..
                 } => match method.as_str() {
+                    "host.auth.get_runtime" => {
+                        let runtime = json!({"account_id":"account-test","provider_id":"openai","credential_revision":self.credential_revision,"name":"Test account","email":null,"upstream_user_id":self.identity,"upstream_account_id":"org-test","plan_type":null,"authentication_kind":"oauth","enabled":true,"credential_state":"ready","has_refresh_token":false,"access_token_expires_at_ms":null,"next_refresh_at_ms":null});
+                        self.reply(id, json!({}), serde_json::to_vec(&runtime).unwrap())
+                            .await;
+                    }
+                    "host.state.get" | "host.state.put" | "host.state.delete"
+                        if ["queue", "tasks", "samples"]
+                            .iter()
+                            .any(|ns| params["namespace"] == *ns) =>
+                    {
+                        let key = format!(
+                            "{}/{}",
+                            params["namespace"].as_str().unwrap(),
+                            params["key"].as_str().unwrap()
+                        );
+                        match method.as_str() {
+                            "host.state.get" => {
+                                let value = self.jobs.get(&key).map(
+                                    |(v, n)| json!({"value":v,"version":n,"schema_version":1}),
+                                );
+                                self.reply(id, json!({"record":value}), vec![]).await;
+                            }
+                            "host.state.put" => {
+                                if self.fail_task_save
+                                    && params["namespace"] == "tasks"
+                                    && params["value"]["status"] != "running"
+                                    && self.jobs.contains_key(&key)
+                                {
+                                    self.fail_task_save = false;
+                                    self.send(Frame::control(Message::Error {
+                                        id,
+                                        error: gateway_plugin_sdk::PluginFault::new(
+                                            gateway_plugin_sdk::ErrorCode::Conflict,
+                                            "simulated lost task commit",
+                                        ),
+                                    }))
+                                    .await;
+                                } else {
+                                    let old = self.jobs.get(&key).map(|(_, v)| *v);
+                                    assert_eq!(params["expected_version"], json!(old));
+                                    let version = old.unwrap_or(0) + 1;
+                                    self.jobs.insert(key, (params["value"].clone(), version));
+                                    self.reply(id, json!({"version":version}), vec![]).await;
+                                }
+                            }
+                            _ => {
+                                self.jobs.remove(&key);
+                                self.reply(id, json!({"deleted":true}), vec![]).await;
+                            }
+                        }
+                    }
                     "host.state.get" | "host.state.put" | "host.state.delete"
                         if params["namespace"] == "details" =>
                     {
@@ -186,7 +278,10 @@ impl Host {
                     "host.model.stream_close" => {
                         self.reply(id, json!({"closed":true}), vec![]).await;
                     }
-                    "host.model.stream_read" if self.fail_stream => {
+                    "host.model.stream_read"
+                        if self.fail_stream
+                            || self.failure_after.is_some_and(|n| self.executes >= n) =>
+                    {
                         let mut error = gateway_plugin_sdk::PluginFault::new(
                             gateway_plugin_sdk::ErrorCode::Capacity,
                             "not shown",
@@ -257,6 +352,7 @@ impl Host {
                     }
                     _ => panic!("unexpected callback: {method}"),
                 },
+                Message::Error { id, .. } if id == expected => return (500, Value::Null),
                 other => panic!("unexpected frame: {other:?}"),
             }
         }
@@ -268,6 +364,57 @@ impl Host {
                 Message::Callback {
                     id, method, params, ..
                 } => match method.as_str() {
+                    "host.auth.get_runtime" => {
+                        let runtime = json!({"account_id":"account-test","provider_id":"openai","credential_revision":self.credential_revision,"name":"Test account","email":null,"upstream_user_id":self.identity,"upstream_account_id":"org-test","plan_type":null,"authentication_kind":"oauth","enabled":true,"credential_state":"ready","has_refresh_token":false,"access_token_expires_at_ms":null,"next_refresh_at_ms":null});
+                        self.reply(id, json!({}), serde_json::to_vec(&runtime).unwrap())
+                            .await;
+                    }
+                    "host.state.get" | "host.state.put" | "host.state.delete"
+                        if ["queue", "tasks", "samples"]
+                            .iter()
+                            .any(|ns| params["namespace"] == *ns) =>
+                    {
+                        let key = format!(
+                            "{}/{}",
+                            params["namespace"].as_str().unwrap(),
+                            params["key"].as_str().unwrap()
+                        );
+                        match method.as_str() {
+                            "host.state.get" => {
+                                let value = self.jobs.get(&key).map(
+                                    |(v, n)| json!({"value":v,"version":n,"schema_version":1}),
+                                );
+                                self.reply(id, json!({"record":value}), vec![]).await;
+                            }
+                            "host.state.put" => {
+                                if self.fail_task_save
+                                    && params["namespace"] == "tasks"
+                                    && params["value"]["status"] != "running"
+                                    && self.jobs.contains_key(&key)
+                                {
+                                    self.fail_task_save = false;
+                                    self.send(Frame::control(Message::Error {
+                                        id,
+                                        error: gateway_plugin_sdk::PluginFault::new(
+                                            gateway_plugin_sdk::ErrorCode::Conflict,
+                                            "simulated lost task commit",
+                                        ),
+                                    }))
+                                    .await;
+                                } else {
+                                    let old = self.jobs.get(&key).map(|(_, v)| *v);
+                                    assert_eq!(params["expected_version"], json!(old));
+                                    let version = old.unwrap_or(0) + 1;
+                                    self.jobs.insert(key, (params["value"].clone(), version));
+                                    self.reply(id, json!({"version":version}), vec![]).await;
+                                }
+                            }
+                            _ => {
+                                self.jobs.remove(&key);
+                                self.reply(id, json!({"deleted":true}), vec![]).await;
+                            }
+                        }
+                    }
                     "host.state.get" | "host.state.put" | "host.state.delete"
                         if params["namespace"] == "details" =>
                     {
@@ -541,4 +688,203 @@ async fn stream_failure_preserves_request_id_and_safe_classification() {
     assert!(!result.to_string().contains("must never persist"));
     assert!(result["nextStep"].is_null());
     host.shutdown().await;
+}
+
+#[tokio::test]
+async fn background_submission_is_idempotent_and_budgeted() {
+    let mut h = Host::start().await;
+    let req = run("job-candy", "candy");
+    for id in [1, 3] {
+        h.call(id, "api/submit", Some(req.clone())).await;
+        assert_eq!(h.result(id, "21", true, true).await.0, 200);
+    }
+    assert_eq!(h.executes, 0);
+    h.maintenance(5, 1000).await;
+    h.result(5, "21", true, true).await;
+    assert_eq!(h.executes, 0);
+    h.maintenance(7, 180000).await;
+    h.result(7, "21", true, true).await;
+    assert_eq!(h.executes, 1);
+    let job = &h.jobs["tasks/job-candy"].0;
+    assert_eq!(job["status"], "completed");
+    assert_eq!(job["verdict"], "correct");
+    h.call(9, "api/submit", Some(req)).await;
+    h.result(9, "29", true, true).await;
+    h.maintenance(11, 180000).await;
+    h.result(11, "29", true, true).await;
+    assert_eq!(h.executes, 1);
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn background_invalid_sample_pauses_and_resume_reuses_plan() {
+    let mut h = Host::start().await;
+    h.call(1, "api/submit", Some(run("job-fp", "fingerprint")))
+        .await;
+    h.result(1, "", true, true).await;
+    let plan = h.jobs["tasks/job-fp"].0["plan"].clone();
+    h.maintenance(3, 180000).await;
+    h.result(3, "21", true, true).await;
+    assert_eq!(h.jobs["tasks/job-fp"].0["status"], "paused");
+    assert_eq!(h.executes, 1);
+    h.maintenance(5, 180000).await;
+    h.result(5, "21", true, true).await;
+    assert_eq!(h.executes, 1);
+    h.call(7, "api/resume", Some(json!({"id":"job-fp"}))).await;
+    assert_eq!(h.result(7, "", true, true).await.0, 200);
+    h.maintenance(9, 180000).await;
+    h.result(9, "21", true, true).await;
+    assert_eq!(h.jobs["tasks/job-fp"].0["plan"], plan);
+    assert_eq!(h.executes, 2);
+    assert_eq!(
+        h.jobs["tasks/job-fp"].0["attempts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn background_identity_change_blocks_execution() {
+    let mut h = Host::start().await;
+    h.call(1, "api/submit", Some(run("identity", "candy")))
+        .await;
+    h.result(1, "", true, true).await;
+    h.identity = "other-user".into();
+    h.maintenance(3, 180000).await;
+    h.result(3, "21", true, true).await;
+    assert_eq!(h.executes, 0);
+    assert_eq!(h.jobs["tasks/identity"].0["reason"], "identity_changed");
+    h.call(5, "api/resume", Some(json!({"id":"identity"})))
+        .await;
+    assert_eq!(h.result(5, "", true, true).await.0, 409);
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn background_recovers_durable_outcome_without_replaying() {
+    let mut h = Host::start().await;
+    h.call(1, "api/submit", Some(run("recover", "candy"))).await;
+    h.result(1, "", true, true).await;
+    h.fail_task_save = true;
+    h.maintenance(3, 180000).await;
+    assert_eq!(h.result(3, "21", true, true).await.0, 500);
+    assert_eq!(h.jobs["tasks/recover"].0["status"], "running");
+    assert!(h.jobs.contains_key("samples/recover-0"));
+    h.maintenance(5, 180000).await;
+    h.result(5, "29", true, true).await;
+    assert_eq!(h.executes, 1);
+    assert_eq!(h.jobs["tasks/recover"].0["verdict"], "correct");
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn background_unknown_intent_requires_explicit_resume() {
+    let mut h = Host::start().await;
+    h.call(1, "api/submit", Some(run("unknown", "candy"))).await;
+    h.result(1, "", true, true).await;
+    let (job, _) = h.jobs.get_mut("tasks/unknown").unwrap();
+    job["status"] = json!("running");
+    job["pending"] = json!({"key":"unknown-0","step":0});
+    h.maintenance(3, 180000).await;
+    h.result(3, "21", true, true).await;
+    assert_eq!(h.executes, 0);
+    assert_eq!(h.jobs["tasks/unknown"].0["reason"], "uncertain");
+    h.call(5, "api/task", Some(json!({"id":"unknown"}))).await;
+    assert_eq!(
+        h.result(5, "", true, true).await.1["record"]["canResume"],
+        true
+    );
+    h.call(7, "api/resume", Some(json!({"id":"unknown"}))).await;
+    h.result(7, "", true, true).await;
+    h.maintenance(9, 180000).await;
+    h.result(9, "21", true, true).await;
+    assert_eq!(h.executes, 1);
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn background_keeps_valid_samples_when_later_request_fails() {
+    let mut h = Host::start().await;
+    h.call(1, "api/submit", Some(run("retained", "fingerprint")))
+        .await;
+    h.result(1, "", true, true).await;
+    let fixtures: Value =
+        serde_json::from_slice(include_bytes!("fixtures/fingerprint.json")).unwrap();
+    let text = format!(
+        "{},{}",
+        fixtures[0]["text"].as_str().unwrap(),
+        fixtures[0]["text"].as_str().unwrap()
+    );
+    h.failure_after = Some(2);
+    h.maintenance(3, 180000).await;
+    h.result(3, &text, true, true).await;
+    let saved = &h.jobs["tasks/retained"].0;
+    assert_eq!(saved["status"], "paused");
+    assert!(saved["accepted"][0].is_string());
+    assert!(saved["accepted"][1].is_null());
+    let first = saved["accepted"][0].clone();
+    h.failure_after = None;
+    h.call(5, "api/resume", Some(json!({"id":"retained"})))
+        .await;
+    h.result(5, "", true, true).await;
+    h.maintenance(7, 180000).await;
+    h.result(7, &text, true, true).await;
+    assert_eq!(h.executes, 4);
+    assert_eq!(h.jobs["tasks/retained"].0["accepted"][0], first);
+    assert_eq!(h.jobs["tasks/retained"].0["status"], "completed");
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn stopping_after_outcome_commit_preserves_answer() {
+    let mut h = Host::start().await;
+    h.call(1, "api/submit", Some(run("stop-recovery", "candy")))
+        .await;
+    h.result(1, "", true, true).await;
+    h.fail_task_save = true;
+    h.maintenance(3, 180000).await;
+    assert_eq!(h.result(3, "21", true, true).await.0, 500);
+    h.call(5, "api/stop", Some(json!({"id":"stop-recovery"})))
+        .await;
+    assert_eq!(h.result(5, "", true, true).await.0, 200);
+    assert_eq!(h.jobs["tasks/stop-recovery"].0["status"], "stopped");
+    assert_eq!(
+        h.jobs["tasks/stop-recovery"].0["attempts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    h.call(
+        7,
+        "api/sample",
+        Some(json!({"id":"stop-recovery","key":"stop-recovery-0"})),
+    )
+    .await;
+    assert_eq!(
+        h.result(7, "", true, true).await.1["sample"]["answer"]["text"],
+        "21"
+    );
+    h.call(9, "api/delete", Some(json!({"id":"stop-recovery"})))
+        .await;
+    h.result(9, "", true, true).await;
+    assert!(!h.jobs.contains_key("samples/stop-recovery-0"));
+    assert!(!h.jobs.contains_key("tasks/stop-recovery"));
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn stable_upstream_identity_allows_credential_refresh() {
+    let mut h = Host::start().await;
+    h.call(1, "api/submit", Some(run("refresh", "candy"))).await;
+    h.result(1, "", true, true).await;
+    h.credential_revision = 2;
+    h.maintenance(3, 180000).await;
+    h.result(3, "21", true, true).await;
+    assert_eq!(h.executes, 1);
+    assert_eq!(h.jobs["tasks/refresh"].0["verdict"], "correct");
+    h.shutdown().await;
 }

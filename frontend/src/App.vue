@@ -1,149 +1,164 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { ZButton, ZCard, ZConfigProvider, ZSelect } from '@codex-proxy/ui'
-import { zhHans } from '@codex-proxy/ui/locale'
-import { api, isPreview, type Account, type ClientKey, type RecordEntry } from './api'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { api, isPreview, type Account, type ClientKey, type RecordEntry, type Sample } from './api'
+import { kinds, profiles, reasons, label, active } from './presentation'
 import ResultDetails from './components/ResultDetails.vue'
 
 const accounts = ref<Account[]>([]), keys = ref<ClientKey[]>([]), records = ref<RecordEntry[]>([])
 const selected = ref<string[]>([]), keyId = ref(''), model = ref(''), models = ref<string[]>([])
-const profile = ref('codex-context-v1'), accountFilter = ref(''), typeFilter = ref(''), confirmClear = ref(false)
-const profileOptions = [{ label: 'Codex 上下文 v1', value: 'codex-context-v1' }, { label: '简化请求 v1', value: 'simple-v1' }]
-const visibleRecords = computed(() => records.value.filter(r => (!accountFilter.value || r.accountId === accountFilter.value) && (!typeFilter.value || r.kind === typeFilter.value)))
-const recordProfile = (r: RecordEntry) => r.requestProfile ?? 'simple-v1'
-const stats = (id: string) => { const rows = records.value.filter(r => r.accountId === id && r.kind === 'candy' && r.model === model.value && r.effort === effort.value && recordProfile(r) === profile.value); const graded = rows.filter(r => ['correct','wrong'].includes(r.status)); return `${graded.filter(r => r.status === 'correct').length}/${graded.length} · 失败 ${rows.filter(r => r.status === 'failed').length}` }
-const latest = (id: string) => records.value.find(r => r.accountId === id && r.kind === kind.value)
-const time = (value: number) => new Date(value).toLocaleString('zh-CN', { hour12: false })
-async function clearHistory() { try { await api.clear(accountFilter.value || null, typeFilter.value || null); confirmClear.value = false; await refresh() } catch(e) { error.value = (e as Error).message } }
-const kind = ref('candy'), effort = ref(''), repeats = ref(1), error = ref(''), notice = ref('')
-const loading = ref(true), modelLoading = ref(false), running = ref(false), stopping = ref(false)
-const progress = ref(''), activeId = ref(''), openRecord = ref(''), showExport = ref(false)
-const serverActive = ref('')
-let refreshTimer: ReturnType<typeof setTimeout> | undefined
-let stopped = false, disposed = false, modelSequence = 0
-const kindOptions = [{ label: '糖果题', value: 'candy' }, { label: '指纹检测', value: 'fingerprint' }, { label: '画鹈鹕', value: 'pelican' }]
-const effortOptions = [{ label: '默认', value: '' }, ...['none', 'low', 'medium', 'high', 'xhigh', 'max'].map(value => ({ label: value, value }))]
+const kind = ref('candy'), profile = ref('simple-v1'), effort = ref(''), repeats = ref(1)
+const busy = ref(false), modelLoading = ref(false), error = ref(''), notice = ref('')
+const accountFilter = ref(''), kindFilter = ref(''), tab = ref('tasks'), deleteId = ref('')
+const report = ref<RecordEntry | null>(null), reportLoading = ref(false), exportText = ref('')
+const sampleCache = new Map<string, Sample>()
+type Submission = Parameters<typeof api.submit>[0]
+const retrySubmission = ref<Submission[]>([])
+let disposed = false, timer: ReturnType<typeof setTimeout> | undefined, modelSequence = 0, polling = false
 const usable = computed(() => accounts.value.filter(a => a.enabled))
-const ready = computed(() => !isPreview && !loading.value && !modelLoading.value && !detailLoading.value && !running.value && !serverActive.value && !!keyId.value && !!model.value)
-const canRun = computed(() => ready.value && selected.value.length > 0)
+const running = computed(() => records.value.filter(active))
+const visible = computed(() => records.value.filter(r => (!accountFilter.value || r.accountId === accountFilter.value) && (!kindFilter.value || r.kind === kindFilter.value) && (tab.value === 'tasks' ? active(r) || r.status === 'paused' : !active(r) && r.status !== 'paused')))
+const ready = computed(() => !isPreview && !busy.value && !modelLoading.value && !!keyId.value && !!model.value && !retrySubmission.value.length)
 const expected = computed(() => selected.value.length * (kind.value === 'candy' ? repeats.value : 1) * (kind.value === 'fingerprint' ? 3 : 1))
-const statusLabel: Record<string, string> = { correct: '答对', wrong: '答错', completed: '完成', failed: '执行失败', cancelled: '已取消', unscorable: '无法评分', partial: '未完成', running: '进行中', interrupted: '已中断' }
-const accountName = (id: string) => accounts.value.find(a => a.account_id === id)?.name ?? id
-const detailLoading = ref(false)
-async function loadDetail(id: string) {
-  const old=records.value.find(r=>r.id===id)
-  if (!old?.summaryOnly) return
-  const result=await api.detail(id)
-  if (!result.record) throw new Error('该记录已被清理或淘汰')
-  records.value=records.value.map(r=>r.id===id ? result.record! : r)
+const accountName = (r: RecordEntry) => r.accountName ?? accounts.value.find(a => a.account_id === r.accountId)?.name ?? r.accountId
+const date = (ms: number) => new Date(ms).toLocaleString('zh-CN', { hour12: false })
+const latest = (id:string) => records.value.find(r => r.task && r.accountId === id && r.kind === kind.value && r.model === model.value && r.effort === effort.value && r.requestProfile === profile.value)
+function candyStats(id:string) {
+  const graded = records.value.filter(r => r.task && r.accountId === id && r.kind === 'candy' && r.model === model.value && r.effort === effort.value && r.requestProfile === profile.value && r.status === 'completed')
+  return graded.length ? `${graded.filter(r => r.verdict === 'correct').length} / ${graded.length}` : '—'
 }
-async function openDetails(id: string) {openRecord.value=id;try {await loadDetail(id)} catch(e) {error.value=(e as Error).message}}
-async function exportRecords() {
-  if(showExport.value) {showExport.value=false;return}
-  detailLoading.value=true
-  try {for(const r of [...visibleRecords.value]) await loadDetail(r.id);showExport.value=true} catch(e) {error.value=(e as Error).message} finally {detailLoading.value=false}
-}
-const exportText = computed(() => JSON.stringify({ records: visibleRecords.value }, null, 2))
-async function refresh() {
-  clearTimeout(refreshTimer)
-  loading.value = true; error.value = ''
+async function poll() {
+  if (disposed || polling || isPreview) return
+  polling = true
   try {
-    const [snapshot, history] = await Promise.all([api.snapshot(), api.history()])
+    const [tasks, legacy] = await Promise.all([api.tasks(), api.history()])
     if (disposed) return
-    accounts.value = snapshot.accounts; keys.value = snapshot.keys.filter(k => k.enabled); records.value = history.records
-    if (openRecord.value) await loadDetail(openRecord.value)
-    serverActive.value = snapshot.activeId ?? ''
-    if (!serverActive.value && !running.value) stopping.value = false
-    if (serverActive.value && !running.value) refreshTimer = setTimeout(() => { if (!disposed) void refresh() }, 1500)
-    if (!keys.value.some(k => k.id === keyId.value)) keyId.value = keys.value[0]?.id ?? ''
-    selected.value = selected.value.filter(id => usable.value.some(a => a.account_id === id))
-  } catch (e) { error.value = (e as Error).message } finally { loading.value = false }
+    records.value = [...tasks.records, ...legacy.records].sort((a,b) => b.startedAt - a.startedAt)
+    if (report.value?.task && records.value.some(r => r.id === report.value?.id && r.updatedAt !== report.value?.updatedAt)) await openReport(report.value.id, false)
+  } catch(e) { error.value = (e as Error).message }
+  finally { polling = false; clearTimeout(timer); if (!disposed) timer = setTimeout(poll, running.value.length ? 2000 : 10000) }
 }
-watch(keyId, async value => {
-  const sequence = ++modelSequence
-  models.value = []; model.value = ''; modelLoading.value = !!value
-  if (!value) return
-  try { const result = await api.models(value); if (sequence === modelSequence && !disposed) { models.value = result.models; model.value = result.models[0] ?? '' } }
-  catch (e) { if (sequence === modelSequence) error.value = (e as Error).message }
+async function refresh() {
+  busy.value = true; error.value = ''
+  try {
+    const snapshot = await api.snapshot()
+    if (disposed) return
+    accounts.value = snapshot.accounts; keys.value = snapshot.keys.filter(k => k.enabled)
+    selected.value = selected.value.filter(id => usable.value.some(a => a.account_id === id))
+    if (!keys.value.some(k => k.id === keyId.value)) keyId.value = keys.value[0]?.id ?? ''
+    await poll()
+  } catch(e) { error.value = (e as Error).message } finally { busy.value = false }
+}
+watch(keyId, async id => {
+  const sequence = ++modelSequence; models.value = []; model.value = ''; modelLoading.value = !!id
+  if (!id) return
+  try { const result = await api.models(id); if (!disposed && sequence === modelSequence) { models.value = result.models; model.value = result.models[0] ?? '' } }
+  catch(e) { if (sequence === modelSequence) error.value = (e as Error).message }
   finally { if (sequence === modelSequence) modelLoading.value = false }
 })
-async function run(ids = selected.value) {
+async function submit(ids = selected.value) {
   if (!ready.value || !ids.length) return
-  running.value = true; stopped = false; stopping.value = false; error.value = ''; notice.value = ''
-  const plan = ids.flatMap(accountId => Array.from({ length: kind.value === 'candy' ? repeats.value : 1 }, () => ({ accountId, clientKeyId: keyId.value, model: model.value, effort: effort.value, kind: kind.value, profile: profile.value })))
+  const planned = ids.length * (kind.value === 'candy' ? repeats.value : 1)
+  const pending = records.value.filter(r => r.task && !['completed','stopped'].includes(r.status)).length
+  if (planned + pending > 16) { error.value = `本次将创建 ${planned} 份检测，已有 ${pending} 份待处理。总数最多 16 份，请减少账号或次数。`; return }
+  retrySubmission.value = ids.flatMap(accountId => Array.from({length:kind.value === 'candy' ? repeats.value : 1}, () => ({id:crypto.randomUUID(),accountId,clientKeyId:keyId.value,model:model.value,effort:effort.value,kind:kind.value,profile:profile.value,step:0})))
+  await sendPending()
+}
+async function sendPending() {
+  busy.value = true; error.value = ''; notice.value = ''; tab.value = 'tasks'
   try {
-    for (let i = 0; i < plan.length && !stopped; i++) {
-      activeId.value = crypto.randomUUID()
-      let step: number | null = 0
-      do {
-        progress.value = `${i + 1} / ${plan.length} · ${accountName(plan[i].accountId)}${plan[i].kind === 'fingerprint' ? ` · 第 ${step + 1} / 3 题` : ''}`
-        const result = await api.run({ id: activeId.value, ...plan[i], step })
-        records.value = [result.record, ...records.value.filter(r => r.id !== result.record.id)].slice(0, 200)
-        openRecord.value = result.record.id
-        if (!result.persisted) { notice.value = '本次结果保存未确认，请展开 JSON 导出保留'; stopped = true }
-        if (result.record.status === 'cancelled' || result.record.status === 'interrupted') stopped = true
-        step = result.nextStep ?? null
-      } while (step !== null && !stopped)
-      if (stopped && records.value[0]?.status === 'partial') {
-        const cancelled = await api.cancel(activeId.value)
-        if (cancelled.record) records.value = [cancelled.record, ...records.value.filter(r => r.id !== cancelled.record!.id)].slice(0, 200)
+    while (retrySubmission.value.length) {
+      await api.submit(retrySubmission.value[0]); retrySubmission.value.shift()
+    }
+    notice.value = '检测已提交。可以关闭页面，CPR 将继续执行。'
+  } catch(e) { error.value = `${(e as Error).message}。尚未确认的提交已保留；重试提交复用原 ID，不会重复创建任务。` }
+  finally { busy.value = false; await poll() }
+}
+async function action(name:'resume'|'stop'|'delete', r:RecordEntry) {
+  busy.value = true; error.value = ''; exportText.value = ''
+  try {
+    await api.action(name,r.id); deleteId.value = ''
+    if (name === 'delete' && report.value?.id === r.id) report.value = null
+    else if (report.value?.id === r.id) await openReport(r.id)
+    await poll()
+  } catch(e) { error.value = (e as Error).message } finally { busy.value = false }
+}
+async function openReport(id:string, loading = true) {
+  const row = records.value.find(r => r.id === id)
+  if (!row) return
+  if (loading) reportLoading.value = true
+  try {
+    const result = row.task ? await api.task(id) : await api.detail(id)
+    if (!result.record) throw new Error('该检测已被清理')
+    const value = result.record
+    if (value.task) {
+      value.samples = []
+      for (const attempt of value.attempts ?? []) {
+        const cached = sampleCache.get(attempt.key) ?? (await api.sample(id,attempt.key)).sample
+        sampleCache.set(attempt.key,cached); value.samples.push(cached)
       }
     }
-  } catch (e) { error.value = (e as Error).message }
-  finally { activeId.value = ''; running.value = false; stopping.value = false; progress.value = '' }
+    if (!disposed) {
+      report.value = value
+      if (loading) { await nextTick(); const target=document.querySelector<HTMLElement>('.report'); target?.focus({preventScroll:true}); target?.scrollIntoView({block:'start'}) }
+    }
+  } catch(e) { error.value = (e as Error).message } finally { reportLoading.value = false }
 }
-async function stop() {
-  stopped = true; stopping.value = true
-  try { if (activeId.value || serverActive.value) await api.cancel(activeId.value || serverActive.value); if (!running.value) await refresh() }
-  catch (e) { error.value = (e as Error).message; stopping.value = false }
+function exportReport() {
+  exportText.value = JSON.stringify(report.value,null,2)
+  // The host sandbox may block downloads; the selectable text remains available.
+  const url = URL.createObjectURL(new Blob([exportText.value], {type:'application/json'}))
+  const link = document.createElement('a'); link.href = url; link.download = `codex-eval-${report.value?.id}.json`; link.click()
+  setTimeout(() => URL.revokeObjectURL(url),1000)
 }
-onMounted(() => { if (isPreview) { loading.value = false; notice.value = '独立页面预览 · 从 CPR 插件入口打开后可读取账号并测试' } else void refresh() })
-onBeforeUnmount(() => { disposed = true; stopped = true; clearTimeout(refreshTimer); if (activeId.value) void api.cancel(activeId.value).catch(() => {}) })
+onMounted(() => { if (isPreview) notice.value = '从 CPR 插件入口打开后，可读取账号并发起检测。'; else void refresh() })
+onBeforeUnmount(() => { disposed = true; clearTimeout(timer) })
 </script>
+
 <template>
-  <ZConfigProvider :locale="zhHans">
-    <main class="eval-page" :aria-busy="loading">
-      <p v-if="notice" role="status" class="notice">{{ notice }}</p>
-      <p v-if="error" role="alert" class="error">{{ error }}</p>
-      <ZCard padding="compact">
-        <div class="toolbar">
-          <label>请求语境<ZSelect v-model="profile" :options="profileOptions" :disabled="running" aria-label="请求语境" /></label>
-          <label>测试类型<ZSelect v-model="kind" :options="kindOptions" :disabled="running" aria-label="测试类型" /></label>
-          <label>客户端 Key<ZSelect v-model="keyId" :options="keys.map(k => ({ label: k.name, value: k.id }))" :disabled="running || loading" placeholder="暂无可用 Key" aria-label="客户端 Key" /></label>
-          <label>模型<ZSelect v-model="model" :options="models.map(value => ({ label: value, value }))" :disabled="running || modelLoading" :placeholder="modelLoading ? '正在读取模型' : '暂无可用模型'" aria-label="模型" /></label>
-          <label>推理强度<ZSelect v-model="effort" :options="effortOptions" :disabled="running" aria-label="推理强度" /></label>
-          <label v-if="kind === 'candy'">每账号次数<ZSelect v-model="repeats" :options="[1, 3, 5, 10].map(value => ({ label: String(value), value }))" :disabled="running" aria-label="每账号次数" /></label>
-        </div>
-        <div class="actions">
-          <ZButton type="primary" :disabled="!canRun" :loading="running" @click="run()">测试所选账号</ZButton>
-          <ZButton v-if="running || serverActive" :disabled="stopping" @click="stop">{{ stopping ? '正在停止' : '停止' }}</ZButton>
-          <ZButton :disabled="loading || running || isPreview" @click="refresh">刷新</ZButton>
-          <span v-if="running" role="status">{{ progress }}</span>
-          <span v-else-if="serverActive" role="status">已有测试正在执行</span>
-          <span v-else class="muted">已选 {{ selected.length }} 个账号 · {{ expected }} 次模型请求，宿主可能额外重试</span>
-        </div>
-        <p class="muted">测试消耗所选账号额度 · Codex 上下文包含较长指令和工具声明，工具执行关闭；不同请求语境分别统计</p>
-      </ZCard>
-      <ZCard title="账号" padding="compact">
-        <p v-if="loading" role="status">正在读取账号</p>
-        <p v-else-if="!accounts.length" class="muted">暂无 OpenAI 账号</p>
-        <div v-else class="table-wrap"><table>
-          <thead><tr><th><input type="checkbox" aria-label="全选可用账号" :disabled="running" :checked="usable.length > 0 && selected.length === usable.length" @change="selected = ($event.target as HTMLInputElement).checked ? usable.map(a => a.account_id) : []"></th><th>账号</th><th>状态</th><th>最近结果</th><th>糖果正确/有效</th><th>操作</th></tr></thead>
-          <tbody><tr v-for="account in accounts" :key="account.account_id"><td><input v-model="selected" type="checkbox" :value="account.account_id" :disabled="running || !account.enabled" :aria-label="`选择 ${account.name}`"></td><td>{{ account.name }}<small class="muted">{{ account.email }}</small></td><td>{{ account.enabled ? '已启用' : '已停用' }}</td><td>{{ latest(account.account_id) ? statusLabel[latest(account.account_id)!.status] : '未测试' }}<small v-if="latest(account.account_id)" class="muted">{{ time(latest(account.account_id)!.startedAt) }}</small></td><td>{{ stats(account.account_id) }}</td><td><ZButton :disabled="!account.enabled || !ready" @click="run([account.account_id])">测试</ZButton></td></tr></tbody>
-        </table></div>
-      </ZCard>
-      <ZCard title="最近测试" padding="compact">
-        <div class="toolbar"><label>账号<ZSelect v-model="accountFilter" :options="[{label:'全部账号',value:''}, ...accounts.map(a => ({label:a.name,value:a.account_id}))]" aria-label="历史账号" :disabled="detailLoading" /></label><label>测试<ZSelect v-model="typeFilter" :options="[{label:'全部测试',value:''},...kindOptions]" aria-label="历史类型" :disabled="detailLoading" /></label></div>
-        <p class="muted">糖果统计限定当前模型、推理强度和请求语境；执行失败不计入正确率</p>
-        <div class="actions"><ZButton :disabled="running || detailLoading || !!serverActive || !visibleRecords.length" @click="confirmClear = !confirmClear">清理筛选历史</ZButton><template v-if="confirmClear"><span>确认删除当前筛选记录？</span><ZButton :disabled="running || !!serverActive" @click="clearHistory">确认清理</ZButton></template></div>
-        <div class="actions"><span class="muted">每账号每种测试最多 20 条；全局最多 200 条 / 15 MB 详情，容量不足时淘汰旧记录</span><ZButton :disabled="!records.length || detailLoading" :loading="detailLoading" @click="exportRecords">JSON 导出</ZButton></div>
-        <textarea v-if="showExport" :value="exportText" readonly aria-label="测试记录 JSON，选中后复制" rows="10" class="export" />
-        <p v-if="!records.length" class="muted">暂无测试记录</p>
-        <details v-for="record in visibleRecords" :key="record.id" :open="openRecord === record.id" class="record" @toggle="($event.target as HTMLDetailsElement).open && openDetails(record.id)">
-          <summary><span>{{ accountName(record.accountId) }} · {{ kindOptions.find(k => k.value === record.kind)?.label }}</span><span :class="['status', record.status]">{{ statusLabel[record.status] ?? record.status }}</span><span class="muted">{{ time(record.startedAt) }} · {{ record.model }} · {{ record.effort || '默认强度' }} · {{ recordProfile(record) }} · {{ (record.durationMs / 1000).toFixed(1) }} 秒</span><span v-if="record.attribution">{{ record.attribution.prediction_name }}</span></summary>
-          <p v-if="record.summaryOnly" class="muted">正在读取详情</p><ResultDetails v-else :record="record" />
-        </details>
-      </ZCard>
-    </main>
-  </ZConfigProvider>
+  <main class="eval-page">
+    <header class="page-heading"><p class="muted">选择账号进行检测，关闭页面后 CPR 会继续执行。</p><button :disabled="busy || isPreview" @click="refresh">刷新</button></header>
+    <p v-if="error" role="alert" class="error">{{ error }}</p>
+    <p v-if="notice" role="status" class="notice">{{ notice }}</p>
+    <section class="panel" aria-labelledby="new-title">
+      <h2 id="new-title">发起检测</h2>
+      <div class="toolbar">
+        <label>测试类型<select v-model="kind" aria-label="测试类型" :disabled="busy"><option v-for="item in kinds" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
+        <label>客户端 Key<select v-model="keyId" aria-label="客户端 Key" :disabled="busy"><option v-if="!keys.length" value="">暂无可用 Key</option><option v-for="key in keys" :key="key.id" :value="key.id">{{ key.name }}</option></select></label>
+        <label>模型<select v-model="model" aria-label="模型" :disabled="busy || modelLoading"><option v-if="!models.length" value="">{{ modelLoading ? '正在读取模型' : '暂无可用模型' }}</option><option v-for="name in models" :key="name" :value="name">{{ name }}</option></select></label>
+        <label v-if="kind === 'candy'">每账号次数<select v-model="repeats" aria-label="每账号次数" :disabled="busy"><option v-for="n in [1,3,5,10]" :key="n" :value="n">{{ n }}</option></select></label>
+      </div>
+      <details class="advanced"><summary>高级设置</summary><div class="toolbar">
+        <label>推理强度<select v-model="effort" aria-label="推理强度"><option value="">默认</option><option v-for="s in ['none','minimal','low','medium','high','xhigh','max']" :key="s">{{ s }}</option></select></label>
+        <label>请求语境<select v-model="profile" aria-label="请求语境"><option v-for="(name,id) in profiles" :key="id" :value="id">{{ name }}</option></select></label>
+      </div><p class="muted">Codex 上下文包含较长指令和工具声明，工具执行关闭。不同语境分别统计。</p></details>
+      <p class="muted">{{ kind === 'fingerprint' ? '三份有效样本后生成参考库候选排名，不能证明真实模型身份。' : kind === 'candy' ? '使用固定糖果题，以独立数字 21 判分。' : '辅助查看绘图输出，不评判模型身份。' }}</p>
+      <div class="table-wrap"><table v-if="accounts.length"><thead><tr><th><input type="checkbox" aria-label="全选可用账号" :checked="!!usable.length && selected.length === usable.length" @change="selected = ($event.target as HTMLInputElement).checked ? usable.map(a => a.account_id) : []"></th><th>账号</th><th>当前条件最近结果</th><th v-if="kind === 'candy'">糖果正确 / 有效</th><th>操作</th></tr></thead><tbody>
+        <tr v-for="account in accounts" :key="account.account_id"><td><input v-model="selected" type="checkbox" :value="account.account_id" :disabled="!account.enabled" :aria-label="`选择 ${account.name}`"></td><td>{{ account.name }}<small class="muted">{{ account.enabled ? account.email : '已停用' }}</small></td><td>{{ latest(account.account_id) ? label(latest(account.account_id)!) : '未测试' }}</td><td v-if="kind === 'candy'">{{ candyStats(account.account_id) }}</td><td><button :disabled="!ready || !account.enabled" @click="submit([account.account_id])">测试</button></td></tr>
+      </tbody></table><p v-else class="muted">暂无 OpenAI 账号</p></div>
+      <div class="actions"><button class="primary" :disabled="!ready || !selected.length" @click="submit()">测试所选账号</button><span class="muted">已选 {{ selected.length }} 个账号 · 计划 {{ expected }} 次模型请求</span></div>
+      <p class="muted">消耗所选账号额度。插件不自动重试，宿主可能额外重试。每次最多保留 16 个待处理任务。</p>
+      <div v-if="retrySubmission.length" class="actions"><button :disabled="busy" @click="sendPending">重试提交</button><button :disabled="busy" @click="retrySubmission = []; notice = '已放弃未确认的提交；请刷新检查是否已有任务。'">放弃未确认的提交</button></div>
+    </section>
+    <section class="panel" aria-labelledby="tasks-title">
+      <div class="section-heading"><h2 id="tasks-title">检测记录</h2><nav aria-label="检测记录视图"><button :aria-pressed="tab === 'tasks'" @click="tab = 'tasks'">任务</button><button :aria-pressed="tab === 'history'" @click="tab = 'history'">历史</button></nav></div>
+      <div class="toolbar filters"><label>账号<select v-model="accountFilter" aria-label="筛选账号"><option value="">全部账号</option><option v-for="a in accounts" :key="a.account_id" :value="a.account_id">{{ a.name }}</option></select></label><label>测试<select v-model="kindFilter" aria-label="筛选测试"><option value="">全部测试</option><option v-for="k in kinds" :key="k.value" :value="k.value">{{ k.label }}</option></select></label></div>
+      <p v-if="!visible.length" class="empty muted">{{ tab === 'tasks' ? '暂无待处理检测' : '暂无历史记录' }}</p>
+      <article v-for="r in visible" :key="r.id" class="task-row">
+        <div><strong>{{ accountName(r) }}</strong><span class="badge">{{ label(r) }}</span><p class="muted">{{ kinds.find(k => k.value === r.kind)?.label }} · {{ r.model }} · {{ date(r.startedAt) }}<span v-if="!r.task"> · 旧版记录</span></p><p v-if="r.task" class="muted">有效样本 {{ r.validSamples }} / {{ r.expectedSamples }}<span v-if="r.status === 'queued'"> · 等待宿主调度</span><span v-if="r.stopRequested && active(r)"> · 正在停止</span></p><p v-if="r.reason">{{ reasons[r.reason] ?? '执行未完成，请查看报告中的请求诊断。' }}</p></div>
+        <div class="actions"><button :disabled="reportLoading" @click="openReport(r.id)">查看报告</button><button v-if="r.canResume" :disabled="busy" @click="action('resume',r)">继续检测</button><button v-if="active(r) || r.status === 'paused'" :disabled="busy || r.stopRequested" @click="action('stop',r)">停止</button><button v-if="r.task && !active(r)" :disabled="busy" @click="deleteId = r.id">删除</button><template v-if="deleteId === r.id"><span>删除本次检测和全部样本？</span><button :disabled="busy" @click="action('delete',r)">确认删除</button><button @click="deleteId = ''">取消</button></template></div>
+      </article>
+      <p class="muted">新版最多保留 100 份检测及约 12 MB 样本，优先淘汰旧的已结束记录。排队、执行和暂停中的检测受到保护。统计仅针对保留记录。</p>
+    </section>
+    <section v-if="report" class="panel report" aria-labelledby="report-title" tabindex="-1">
+      <div class="section-heading"><h2 id="report-title">检测报告</h2><button @click="report = null; exportText = ''">关闭报告</button></div>
+      <p class="report-verdict">{{ label(report) }}</p><p>{{ accountName(report) }} · {{ report.model }} · {{ report.effort || '默认推理强度' }} · {{ profiles[report.requestProfile ?? 'simple-v1'] }}</p>
+      <p v-if="report.reason">{{ reasons[report.reason] ?? '请查看下方请求诊断。' }}</p>
+      <p v-if="!report.task" class="notice">旧版记录保留原结果；缺失的身份和任务信息未补造，不计入新版统计。</p>
+      <p v-if="report.kind === 'candy'">答案标准：21。未取得有效回答不记为答错。</p>
+      <div class="actions"><button v-if="report.canResume" :disabled="busy" @click="action('resume',report)">继续检测</button><button @click="exportReport">导出本次报告</button></div>
+      <ResultDetails :record="report" />
+      <details><summary>检测版本与请求依据</summary><p class="muted">插件 {{ report.pluginVersion ?? '旧版未记录' }} · 检测器 {{ report.detectorVersion ?? '旧版未记录' }}</p><pre>{{ JSON.stringify(report.sourceHashes ?? '旧版未记录',null,2) }}</pre></details>
+      <textarea v-if="exportText" :value="exportText" readonly rows="10" class="export" aria-label="报告 JSON，下载受限时可选中复制" />
+    </section>
+  </main>
 </template>

@@ -9,7 +9,7 @@ use gateway_plugin_sdk::{
         },
         management::ManagementRequest,
     },
-    client::TypedCall,
+    client::{CallCancellation, HostClient, TypedCall},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -23,7 +23,7 @@ fn default_profile() -> String {
     "simple-v1".into()
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RunRequest {
     pub id: String,
@@ -53,10 +53,10 @@ impl RunRequest {
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct Planned {
-    prompt: String,
-    instructions: String,
-    expected_count: Option<u64>,
+pub struct Planned {
+    pub prompt: String,
+    pub instructions: String,
+    pub expected_count: Option<u64>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -81,7 +81,7 @@ fn conflict() -> PluginFault {
     PluginFault::new(ErrorCode::Conflict, "测试进度已变化，请刷新记录")
 }
 
-fn plan(kind: &str) -> Result<Vec<Planned>, PluginFault> {
+pub fn plan(kind: &str) -> Result<Vec<Planned>, PluginFault> {
     if kind != "fingerprint" {
         return Ok(vec![Planned {
             prompt: if kind == "candy" {
@@ -120,8 +120,9 @@ fn plan(kind: &str) -> Result<Vec<Planned>, PluginFault> {
     Ok(selected)
 }
 
-async fn ask(
-    call: &TypedCall<ManagementRequest>,
+pub async fn ask(
+    host: &HostClient,
+    cancellation: &CallCancellation,
     req: &RunRequest,
     p: &Planned,
     cancel: &mut watch::Receiver<bool>,
@@ -176,7 +177,7 @@ async fn ask(
     let mut stream_id = None;
     let execution = async {
         let (started, _): (ModelStreamResult, _) = history::callback(
-            &call.host,
+            host,
             "host.model.execute_stream",
             metadata,
             serde_json::to_vec(&body).map_err(|_| "invalid_request")?,
@@ -193,7 +194,7 @@ async fn ask(
         let mut decoder = model::Decoder::default();
         loop {
             let (chunk, payload): (ModelStreamReadResult, _) = history::callback(
-                &call.host,
+                host,
                 "host.model.stream_read",
                 ModelStreamReadRequest {
                     stream: started.stream.clone(),
@@ -222,7 +223,7 @@ async fn ask(
     };
     let result = tokio::select! {
         biased;
-        _=call.cancellation.cancelled()=>Err("cancelled"),
+        _=cancellation.cancelled()=>Err("cancelled"),
         _=cancel.changed()=>Err("cancelled"),
         _=tokio::time::sleep(Duration::from_secs(150))=>Err("timeout"),
         result=execution=>result,
@@ -232,7 +233,7 @@ async fn ask(
         let _ = tokio::time::timeout(
             Duration::from_secs(2),
             history::callback::<_, serde_json::Value>(
-                &call.host,
+                host,
                 "host.model.stream_close",
                 ModelStreamCloseRequest { stream },
                 vec![],
@@ -346,7 +347,15 @@ pub async fn run(
     // 先落执行意图再发请求，中断后保留已完成样本，不推测上游是否消费。
     history::append(&call.host, record.clone()).await?;
     let mut diagnostic = None;
-    let result = ask(call, &req, &planned, &mut cancel, &mut diagnostic).await;
+    let result = ask(
+        &call.host,
+        &call.cancellation,
+        &req,
+        &planned,
+        &mut cancel,
+        &mut diagnostic,
+    )
+    .await;
     let (status, request_id, answer) = match result {
         Ok((id, a)) => ("completed", Some(id), Some(a)),
         Err((id, s)) => (s, id, None),

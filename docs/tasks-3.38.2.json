@@ -1,0 +1,25 @@
+{
+  "host": "3.38.2",
+  "archive_sha256": "eb4d96089629c3964cf8c83e308804d43cd6ce8af9c144ced455ffdb2f338e93",
+  "checks": [
+    "Current package loads and preserves legacy-format history",
+    "Durable enqueue and repeated submission execute candy exactly once",
+    "Three frozen fingerprint challenges run and score without a page driving steps",
+    "Drawing output is preserved independently from fingerprint and candy grading",
+    "Large wire stream completes with bounded text, usage and request ID",
+    "Missing success terminal and provider errors pause without being graded wrong",
+    "Native upstream ledger confirms no plugin-level duplicate or automatic retry",
+    "Manual continuation reuses the original challenge and preserves failed attempts",
+    "Stop cancels active execution and the following task can acquire the account",
+    "Runtime replacement marks uncertain consumption and never automatically replays it",
+    "Core Key scope remains enforced for background jobs",
+    "Deletion removes only the chosen finished task and its samples"
+  ],
+  "controlled_upstream_only": true,
+  "post_run_audit": {
+    "fixture_model_posts": 27,
+    "completed_tasks": 10,
+    "stopped_tasks": 6
+  },
+  "harness_note": "All twelve checks printed PASS. The final host-version refresh timed out before report serialization. This report was recovered from that completed run, preceding native version evidence, persisted task states and the controlled upstream ledger. The harness now snapshots the observed host version and saves check progress incrementally."
+}

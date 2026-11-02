@@ -31,6 +31,7 @@ const preview = computed(() => {
 </script>
 <template>
   <div class="details">
+    <p v-if="record.task">已取得 {{ record.validSamples }} / {{ record.expectedSamples }} 个有效样本 · 共 {{ record.attempts?.length ?? 0 }} 次尝试</p>
     <p v-if="Object.keys(totalUsage).length" class="muted">Token 用量：<span v-for="(value,key) in totalUsage" :key="key">{{ key }} {{ value }} · </span></p>
     <p v-if="record.attribution" class="muted">模型家族：{{ record.attribution.family_prediction_name || '未知' }} · 有效样本 {{ record.attribution.used_outputs ?? '未知' }} / 3 · {{ record.attribution.decision === 'not_model' ? '数字序列不像参考库中的语言模型回答，不生成身份结论' : record.attribution.decision === 'unscorable' ? '有效样本不足，无法评分' : '参考库候选归因' }}</p>
     <p v-if="record.kind === 'fingerprint'" class="muted">指纹为参考库内候选排名，概率不代表模型身份证明</p>
@@ -44,7 +45,7 @@ const preview = computed(() => {
     <p v-if="preview" class="muted">预览已清洗并以 SVG 图片隔离；原始回答保留在下方，可选中复制</p>
     <p v-if="!preview && record.kind === 'pelican'" class="muted">未取得可预览的 SVG，请展开查看原始回答</p>
     <details v-for="(sample, i) in record.samples" :key="i" class="sample">
-      <summary>回答 {{ i + 1 }} · {{ sampleLabels[sample.status] ?? sample.status }} · {{ (sample.durationMs / 1000).toFixed(1) }} 秒</summary>
+      <summary>尝试 {{ i + 1 }}<span v-if="sample.step != null"> · 第 {{ sample.step + 1 }} 题</span> · {{ sample.status === 'uncertain' ? '结果不确定' : sampleLabels[sample.status] ?? sample.status }}<span v-if="record.task"> · {{ sample.valid ? '有效样本' : '未计入评分' }}</span> · {{ (sample.durationMs / 1000).toFixed(1) }} 秒</summary>
       <p v-if="record.attribution?.diagnostics?.[i]" class="muted">解析到 {{ record.attribution.diagnostics[i].parsed_numbers }} 个有效数字 / 预期 {{ sample.expectedCount }} 个 · {{ record.attribution.diagnostics[i].accepted ? '样本可用' : '样本不足' }}</p>
       <pre>{{ sample.answer?.text ?? '未取得完整回答' }}</pre>
       <p v-if="sample.error" class="muted">宿主错误码：{{ sample.error.code }} · 分类：{{ sample.error.kind || '未提供' }} · HTTP：{{ sample.error.httpStatus ?? '未提供' }} · 发送状态：{{ sample.error.sendState ?? '未知' }}</p>

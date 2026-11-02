@@ -1,0 +1,89 @@
+{
+  "version": "1.2.0",
+  "observed_date": "2026-11-02",
+  "artifact": {
+    "sha256": "eb4d96089629c3964cf8c83e308804d43cd6ce8af9c144ced455ffdb2f338e93",
+    "bytes": 6592438,
+    "platform": "Linux x86_64",
+    "glibc_minimum": "2.28",
+    "files": 15
+  },
+  "rust_tests_passed": 27,
+  "frontend_tests_passed": 8,
+  "fmt_and_clippy_passed": true,
+  "fixed_sources_verified": 92,
+  "native_host_versions": [
+    "3.36.0",
+    "3.37.2",
+    "3.38.2"
+  ],
+  "native_lifecycle_checks": [
+    "Current package loads and preserves legacy-format history",
+    "Durable enqueue and repeated submission execute candy exactly once",
+    "Three frozen fingerprint challenges run and score without a page driving steps",
+    "Drawing output is preserved independently from fingerprint and candy grading",
+    "Large wire stream completes with bounded text, usage and request ID",
+    "Missing success terminal and provider errors pause without being graded wrong",
+    "Native upstream ledger confirms no plugin-level duplicate or automatic retry",
+    "Manual continuation reuses the original challenge and preserves failed attempts",
+    "Stop cancels active execution and the following task can acquire the account",
+    "Runtime replacement marks uncertain consumption and never automatically replays it",
+    "Core Key scope remains enforced for background jobs",
+    "Deletion removes only the chosen finished task and its samples"
+  ],
+  "native_ui_checks": [
+    "Actual host iframe/CSP and bridge",
+    "Persisted fingerprint ranking and complete evidence export",
+    "Reload retains history without request replay",
+    "Host dark theme and 390px layout"
+  ],
+  "upgrade_paths": [
+    "Released 1.0.0 on CPR 3.35.1 -> 3.36.0 -> 1.2.0 retains every original record",
+    "Released 1.1.2 -> 1.2.0 retains both summary and separate detail namespace"
+  ],
+  "controlled_cancellation": {
+    "host": "3.38.2",
+    "archive_sha256": "eb4d96089629c3964cf8c83e308804d43cd6ce8af9c144ced455ffdb2f338e93",
+    "leases_before_stop": 1,
+    "leases_after_stop": 0,
+    "release_seconds": 0.066,
+    "controlled_upstream_only": true
+  },
+  "real_model_summary": {
+    "requests": 4,
+    "model": "gpt-6.1-sol",
+    "candy": "correct",
+    "fingerprint_valid_samples": 3,
+    "fingerprint_verdict": "ranked"
+  },
+  "credentials_cleanup": {
+    "observed_at": "2026-11-02T08:37:34.445840+00:00",
+    "temporary_database_removed": true,
+    "temporary_control_credentials_removed": true,
+    "production_key_modified": false,
+    "scope": "Temporary key copy existed only in the isolated runtime; that runtime and its database have been removed."
+  },
+  "toolchain": {
+    "rust": "1.99.1",
+    "linker": "Zig 0.14.1",
+    "highest_required_glibc_symbol": "2.28",
+    "binary_sha256": "83b48404d113a3fe0722cec875b50d4bb4ea6071c12ca7b177cefc1fdd971615"
+  },
+  "evidence": [
+    "upgrade-1.2.0.json",
+    "compatibility-3.36.0.json",
+    "compatibility-3.37.2.json",
+    "compatibility-3.38.2.json",
+    "tasks-3.38.2.json",
+    "tasks-ui-3.38.2.json",
+    "cancellation-1.2.0.json",
+    "real-model-1.2.0.json",
+    "credentials-cleanup-1.2.0.json"
+  ],
+  "limits": [
+    "One authorized live run does not establish model identity accuracy",
+    "Plugin calls are distinct from upstream attempt counts",
+    "Production plugin was not installed or changed",
+    "Future CPR versions are not verified"
+  ]
+}

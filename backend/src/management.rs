@@ -19,12 +19,12 @@ use tokio::sync::watch;
 
 pub struct AppState {
     pub detector: lmfpd::Detector,
-    active: Mutex<Option<Active>>,
-    admission: tokio::sync::Mutex<()>,
+    pub(crate) active: Mutex<Option<Active>>,
+    pub(crate) admission: tokio::sync::Mutex<()>,
 }
-struct Active {
-    id: String,
-    cancel: watch::Sender<bool>,
+pub(crate) struct Active {
+    pub(crate) id: String,
+    pub(crate) cancel: watch::Sender<bool>,
 }
 impl AppState {
     pub fn new(detector: lmfpd::Detector) -> Self {
@@ -35,7 +35,7 @@ impl AppState {
         }
     }
 }
-struct ActiveGuard(Arc<AppState>);
+pub(crate) struct ActiveGuard(pub(crate) Arc<AppState>);
 impl Drop for ActiveGuard {
     fn drop(&mut self) {
         if let Ok(mut active) = self.0.active.lock() {
@@ -64,6 +64,13 @@ pub fn registration() -> ManagementRegistration {
             route("POST", "api/cancel"),
             route("POST", "api/clear"),
             route("POST", "api/detail"),
+            route("GET", "api/tasks"),
+            route("POST", "api/submit"),
+            route("POST", "api/task"),
+            route("POST", "api/sample"),
+            route("POST", "api/resume"),
+            route("POST", "api/stop"),
+            route("POST", "api/delete"),
         ],
         resources: ["web/index.html", "web/app.js", "web/app.css"]
             .into_iter()
@@ -126,6 +133,12 @@ struct ClearRequest {
 struct CancelRequest {
     id: String,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SampleRequest {
+    id: String,
+    key: String,
+}
 
 pub async fn handle(
     state: Arc<AppState>,
@@ -167,6 +180,20 @@ async fn dispatch(
         return Err(fault(ErrorCode::InvalidInput, "读取接口不能带正文"));
     }
     match (call.request.method.as_str(), call.request.path.as_str()) {
+        ("GET", "api/tasks") => crate::jobs::list(&call.host).await,
+        ("POST", "api/submit") => crate::jobs::submit(&state, &call.host, body(call)?).await,
+        ("POST", "api/task") => {
+            let req: CancelRequest = body(call)?;
+            crate::jobs::report(&call.host, &req.id).await
+        }
+        ("POST", "api/sample") => {
+            let req: SampleRequest = body(call)?;
+            crate::jobs::sample(&call.host, &req.id, &req.key).await
+        }
+        ("POST", "api/resume" | "api/stop" | "api/delete") => {
+            let req: CancelRequest = body(call)?;
+            crate::jobs::action(&state, &call.host, &req.id, &call.request.path).await
+        }
         ("GET", "api/snapshot") => {
             let mut accounts = Vec::new();
             let mut cursor = None;
@@ -272,6 +299,9 @@ async fn dispatch(
             }
             let (tx, rx) = watch::channel(false);
             let admission = state.admission.lock().await;
+            if crate::jobs::has_pending(&call.host).await? {
+                return Err(fault(ErrorCode::Conflict, "请先处理后台任务"));
+            }
             {
                 let mut active = state.active.lock().map_err(|_| history::invalid())?;
                 if active.is_some() {

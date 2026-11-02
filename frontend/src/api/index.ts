@@ -1,8 +1,8 @@
 export interface Account { account_id: string; name: string; email: string | null; enabled: boolean }
 export interface ClientKey { id: string; name: string; enabled: boolean }
-export interface Sample { error?: { code: string; kind?: string | null; httpStatus?: number | null; sendState?: string }; status: string; prompt: string; instructions: string; expectedCount: number | null; requestId: string | null; answer: { text: string; usage: Record<string, number | null> } | null; durationMs: number }
+export interface Sample { valid?: boolean; step?: number; error?: { code: string; kind?: string | null; httpStatus?: number | null; sendState?: string }; status: string; prompt: string; instructions: string; expectedCount: number | null; requestId: string | null; answer: { text: string; usage: Record<string, number | null> } | null; durationMs: number }
 export interface RecordEntry {
-  summaryOnly?: boolean; id: string; accountId: string; kind: string; model: string; effort: string; status: string
+  task?: boolean; accountName?: string; validSamples?: number; verdict?: string; reason?: string | null; canResume?: boolean; updatedAt?: number; stopRequested?: boolean; attempts?: {key:string; step:number; status:string; valid:boolean}[]; sourceHashes?: unknown; pluginVersion?: string; summaryOnly?: boolean; id: string; accountId: string; kind: string; model: string; effort: string; status: string
   requestProfile?: string; startedAt: number; durationMs: number; samples: Sample[]; detectorVersion: string; expectedSamples?: number; gradingAnswer?: number
   attribution: null | { prediction?: string; family_prediction_name?: string; used_outputs?: number; evidence?: { reason: string }; prediction_name: string; probability: number | null; decision: string; diagnostics?: { parsed_numbers: number; accepted: boolean }[]; results: { display_name: string; score: number; probability: number | null }[] }
 }
@@ -22,6 +22,11 @@ export async function request<T>(path: string, data?: unknown): Promise<T> {
   return result as T
 }
 export const api = {
+  tasks: () => request<{records:RecordEntry[]}>('api/tasks'),
+  submit: (data: {id:string;accountId:string;clientKeyId:string;model:string;effort:string;kind:string;profile:string;step:number}) => request<{record:RecordEntry}>('api/submit',data),
+  task: (id:string) => request<{record:RecordEntry|null}>('api/task',{id}),
+  sample: (id:string,key:string) => request<{sample:Sample}>('api/sample',{id,key}),
+  action: (action:'resume'|'stop'|'delete',id:string) => request(`api/${action}`,{id}),
   snapshot: () => request<{ accounts: Account[]; keys: ClientKey[]; detectorVersion: string; activeId?: string | null }>('api/snapshot'),
   models: (clientKeyId: string) => request<{ models: string[] }>('api/models', { clientKeyId }),
   history: () => request<{ records: RecordEntry[] }>('api/history'),

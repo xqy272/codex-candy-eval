@@ -1,0 +1,43 @@
+import { chromium } from '../frontend/node_modules/playwright/index.mjs'
+import { readFileSync,writeFileSync,mkdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+const root=new URL('../.runtime/integration/',import.meta.url)
+const control=JSON.parse(readFileSync(new URL('control.json',root),'utf8'))
+const state=JSON.parse(readFileSync(new URL('state.json',root),'utf8'))
+const browser=await chromium.launch({channel:'chrome',headless:true})
+const context=await browser.newContext({viewport:{width:1440,height:1000}})
+const login=await context.request.post(control.base+'/api/auth/login',{headers:{Origin:control.base},data:{mode:'admin',username:control.username,password:control.password}})
+if(!login.ok())throw Error('Isolated login failed')
+const page=await context.newPage(), errors=[]
+page.on('pageerror',e=>errors.push(e.message))
+mkdirSync(new URL('ui12/',root),{recursive:true})
+try {
+ await page.goto(control.base+'/plugins/'+state.instanceId+'/codex-candy-eval')
+ await page.locator('iframe').waitFor({timeout:30000})
+ const frame=page.frameLocator('iframe')
+ await frame.getByLabel('测试类型',{exact:true}).waitFor({timeout:30000})
+ await frame.getByRole('button',{name:'历史',exact:true}).click()
+ await frame.getByLabel('筛选测试').selectOption('fingerprint')
+ await frame.getByRole('article').filter({hasText:'已生成候选排名'}).getByRole('button',{name:'查看报告'}).first().click()
+ await frame.locator('.report .results-table').waitFor({timeout:30000})
+ await frame.locator('.report').screenshot({path:fileURLToPath(new URL('ui12/native-report.png',root))})
+ await frame.getByRole('button',{name:'导出本次报告'}).click()
+ const exported=JSON.parse(await frame.getByLabel('报告 JSON，下载受限时可选中复制').inputValue())
+ if(exported.validSamples!==3 || exported.samples.length!==3 || !exported.sourceHashes.bank)throw Error('Native report lost scoring evidence')
+ await page.reload();await frame.getByLabel('测试类型',{exact:true}).waitFor({timeout:30000})
+ await frame.getByRole('button',{name:'历史',exact:true}).click()
+ await frame.getByLabel('筛选测试').selectOption('candy')
+ await frame.getByRole('article').getByRole('button',{name:'查看报告'}).first().click()
+ await frame.locator('.report').waitFor()
+ await page.getByRole('button',{name:'切换暗黑模式'}).click()
+ await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark')
+ const backgrounds=await frame.locator('html').evaluate(el=>({actual:getComputedStyle(el).backgroundColor,expected:getComputedStyle(el).getPropertyValue('--z-color-bg-layout').trim() || getComputedStyle(el).getPropertyValue('--cp-color-bg-layout').trim()}))
+ if(backgrounds.actual==='rgb(246, 248, 251)' || !backgrounds.expected)throw Error('Native dark background did not follow host theme')
+ await page.setViewportSize({width:390,height:844})
+ if(!await frame.locator('html').evaluate(el=>el.scrollWidth<=innerWidth))throw Error('Native narrow layout overflow')
+ await frame.locator('.report').screenshot({path:fileURLToPath(new URL('ui12/native-dark-mobile.png',root))})
+ if(errors.length)throw Error('Native page errors: '+errors.join(';'))
+ writeFileSync(new URL('tasks-ui-report.json',root),JSON.stringify({archive_sha256:state.artifactSha256,checks:['Actual host iframe/CSP and bridge','Persisted fingerprint ranking and complete evidence export','Reload retains history without request replay','Host dark theme and 390px layout'],errors},null,2))
+ console.log('PASS: native task report, export, reload, dark theme and narrow layout')
+} catch(e) {await page.screenshot({path:fileURLToPath(new URL('ui12/failure.png',root)),fullPage:true});throw e}
+finally {await browser.close()}

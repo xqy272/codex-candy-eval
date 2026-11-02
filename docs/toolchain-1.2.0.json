@@ -1,0 +1,6 @@
+{
+  "rust": "1.99.1",
+  "linker": "Zig 0.14.1",
+  "highest_required_glibc_symbol": "2.28",
+  "binary_sha256": "83b48404d113a3fe0722cec875b50d4bb4ea6071c12ca7b177cefc1fdd971615"
+}
