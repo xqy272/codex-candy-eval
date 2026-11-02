@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     sync::Arc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::watch;
 
@@ -697,7 +697,7 @@ pub async fn tick(state: Arc<AppState>, call: &TypedCall<Empty>) -> Result<(), P
         if call
             .host
             .remaining_budget()
-            .is_some_and(|b| b < Duration::from_secs(160))
+            .is_some_and(|b| b < evaluation::required_budget(&job.request.kind))
         {
             return Ok(());
         }

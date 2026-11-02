@@ -20,8 +20,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("插件握手与清单不一致".into());
     }
     session.set_call_budgets(CallBudgets::from([
-        (Stage::Management, 170_000),
-        (Stage::Maintenance, 180_000),
+        (Stage::Management, 620_000),
+        (Stage::Maintenance, 630_000),
     ]))?;
     let data = std::env::current_exe()?
         .parent()

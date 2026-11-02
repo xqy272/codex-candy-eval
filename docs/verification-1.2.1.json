@@ -1,0 +1,114 @@
+{
+  "version": "1.2.1",
+  "observedDate": "2026-11-03",
+  "artifact": {
+    "sha256": "646b554d85dd17b50e2e5d1c307212776efd8ba3db4928e7c3ca85f8b1559c07",
+    "bytes": 6593580,
+    "platform": "Linux x86_64",
+    "highestRequiredGlibc": "2.28"
+  },
+  "rustTests": 30,
+  "frontendTests": 10,
+  "fmtClippyBuildAndFixedSourcesPassed": true,
+  "fixedSources": 92,
+  "nativeHostVersions": [
+    "3.36.0",
+    "3.38.2",
+    "3.39.0"
+  ],
+  "slowDrawingOldPackage": {
+    "observedAt": "2026-11-02T17:14:09.826054+00:00",
+    "host": "3.38.2",
+    "plugin": "1.2.0",
+    "archiveSha256": "eb4d96089629c3964cf8c83e308804d43cd6ce8af9c144ced455ffdb2f338e93",
+    "controlledFixtureDelaySeconds": 165,
+    "logicalStatus": "paused",
+    "reason": "timeout",
+    "durationMs": 150004,
+    "complete": false,
+    "requestIdPreserved": true,
+    "usage": null,
+    "pluginRequests": 1,
+    "productionRequests": 0
+  },
+  "slowDrawingFixedPackage": {
+    "observedAt": "2026-11-02T17:38:49.548870+00:00",
+    "host": "3.39.0",
+    "plugin": "1.2.1",
+    "archiveSha256": "646b554d85dd17b50e2e5d1c307212776efd8ba3db4928e7c3ca85f8b1559c07",
+    "controlledFixtureDelaySeconds": 165,
+    "logicalStatus": "completed",
+    "reason": null,
+    "durationMs": 165013,
+    "complete": true,
+    "requestIdPreserved": true,
+    "usage": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 0,
+      "image_input_tokens": 0,
+      "image_output_tokens": 0,
+      "input_tokens": 20,
+      "output_tokens": 5,
+      "reasoning_tokens": 0,
+      "total_tokens": 25
+    },
+    "pluginRequests": 1,
+    "productionRequests": 0,
+    "resumedOriginalFailedTask": true,
+    "attemptsPreserved": 2,
+    "originalFailure": "incomplete",
+    "frozenPromptAndInstructionsPreserved": true,
+    "perModelFixtureCallsTotal": 2,
+    "harnessRecovery": "The original slow-check process completed all response assertions but failed its global async snapshot delta. Read-only recovery checked the durable task, both attempts, final archive and exactly two per-model fixture calls; no model request was repeated. The harness now waits for the snapshot and counts only the selected model."
+  },
+  "upgrade": {
+    "oldTaskPreserved": true,
+    "oldSamplePreserved": true,
+    "pausedTaskNotAutomaticallyRetried": true,
+    "controlledCompatibilityRequests": 4,
+    "productionRequests": 0
+  },
+  "cancellation": {
+    "host": "3.39.0",
+    "archive_sha256": "646b554d85dd17b50e2e5d1c307212776efd8ba3db4928e7c3ca85f8b1559c07",
+    "leases_before_stop": 1,
+    "leases_after_stop": 0,
+    "release_seconds": 0.095,
+    "controlled_upstream_only": true
+  },
+  "nativeUi": {
+    "archive_sha256": "646b554d85dd17b50e2e5d1c307212776efd8ba3db4928e7c3ca85f8b1559c07",
+    "checks": [
+      "Actual host iframe/CSP and bridge",
+      "Persisted fingerprint ranking and complete evidence export",
+      "Reload retains history without request replay",
+      "Host dark theme and 390px layout"
+    ],
+    "errors": []
+  },
+  "drawingUi": {
+    "archiveSha256": "646b554d85dd17b50e2e5d1c307212776efd8ba3db4928e7c3ca85f8b1559c07",
+    "firstAttempt": "incomplete",
+    "secondAttempt": "completed",
+    "svgRendered": true,
+    "attemptsPreservedInExport": 2,
+    "actualHostIframeAndCsp": true,
+    "errors": []
+  },
+  "modelTimeoutSeconds": {
+    "pelican": 600,
+    "candy": 150,
+    "fingerprint": 150
+  },
+  "maintenanceBudgetSeconds": 630,
+  "fullWindowReservationSeconds": 10,
+  "productionModelRequestsDuringThisFix": 0,
+  "productionChanges": false,
+  "limits": [
+    "Native SVG is a controlled 165-second fixture, not a new real-model request.",
+    "600-second deadline is verified with virtual time; not a ten-minute native wait.",
+    "Production cancelled rows were read; original task records were absent from the task list.",
+    "Missing final usage is unknown consumption, not zero usage."
+  ],
+  "harnessNote": "An earlier isolated 3.39.0-to-3.36.0 same-database host switch exited during startup and was cleaned. Exit details were not retained; no schema root cause is claimed. Final matrix starts from a fresh 3.36.0 database and proceeds upward; production downgrade is not tested."
+}

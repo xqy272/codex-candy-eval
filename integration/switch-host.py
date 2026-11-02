@@ -1,8 +1,8 @@
 """Switch only between the matrix directories registered when starting run_host.py."""
 from native_client import Client,WORK
-import sys,time
+import sys,time,re
 index=int(sys.argv[1]);expected=sys.argv[2]
-assert (index,expected) in [(0,'3.37.2'),(1,'3.38.2')]
+assert index >= 0 and re.fullmatch(r'\d+\.\d+\.\d+',expected)
 (WORK/'switch-complete').unlink(missing_ok=True)
 (WORK/'switch-host').write_text(str(index))
 for _ in range(240):

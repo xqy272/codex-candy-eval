@@ -16,7 +16,7 @@ const totalUsage = computed(() => props.record.samples.reduce((sum, sample) => {
 const sampleLabels: Record<string, string> = { completed: '完整完成', cancelled: '已取消', timeout: '超时', execution_failed: '宿主执行失败', incomplete: '响应不完整或超出上限', invalid_request: '请求无效', answer_too_large: '回答超过 48 KiB 上限', empty_answer: '没有可用文本', invalid_events: '宿主事件格式无效', permission_denied: 'Key 权限或账号资格拒绝', capacity: '宿主返回容量类错误（具体原因未提供）', queue_full: '宿主并发等待队列已满', queue_timeout: '宿主并发排队超时', account_capacity: '所选账号没有可用并发容量', rate_limited: '宿主限流', no_provider: '没有可用 Provider', response_buffer_limit: '整轮响应超过宿主缓冲上限', event_too_large: '单个事件超过宿主分块上限' }
 const preview = computed(() => {
   if (props.record.kind !== 'pelican' || props.record.status !== 'completed') return ''
-  const text = props.record.samples[0]?.answer?.text ?? ''
+  const text = props.record.samples.find(sample => sample.status === 'completed' && sample.valid !== false && sample.answer?.text)?.answer?.text ?? ''
   const code = text.match(/```(?:html|svg)?\s*\n([\s\S]*?)```/i)?.[1] ?? text
   const safe = DOMPurify.sanitize(code, { FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'link', 'base', 'meta', 'form', 'a', 'foreignObject', 'image'], FORBID_ATTR: ['href', 'xlink:href', 'src', 'action', 'formaction'] })
   const document = new DOMParser().parseFromString(safe, 'text/html')
@@ -48,7 +48,8 @@ const preview = computed(() => {
       <summary>尝试 {{ i + 1 }}<span v-if="sample.step != null"> · 第 {{ sample.step + 1 }} 题</span> · {{ sample.status === 'uncertain' ? '结果不确定' : sampleLabels[sample.status] ?? sample.status }}<span v-if="record.task"> · {{ sample.valid ? '有效样本' : '未计入评分' }}</span> · {{ (sample.durationMs / 1000).toFixed(1) }} 秒</summary>
       <p v-if="record.attribution?.diagnostics?.[i]" class="muted">解析到 {{ record.attribution.diagnostics[i].parsed_numbers }} 个有效数字 / 预期 {{ sample.expectedCount }} 个 · {{ record.attribution.diagnostics[i].accepted ? '样本可用' : '样本不足' }}</p>
       <pre>{{ sample.answer?.text ?? '未取得完整回答' }}</pre>
-      <p v-if="sample.error" class="muted">宿主错误码：{{ sample.error.code }} · 分类：{{ sample.error.kind || '未提供' }} · HTTP：{{ sample.error.httpStatus ?? '未提供' }} · 发送状态：{{ sample.error.sendState ?? '未知' }}</p>
+      <p v-if="sample.error?.origin === 'plugin'" class="muted">已达到插件的 {{ (sample.error.timeoutMs ?? 0) / 1000 }} 秒等待上限，主动结束请求。未取得最终用量，不代表未消耗额度。</p>
+      <p v-else-if="sample.error" class="muted">宿主错误码：{{ sample.error.code }} · 分类：{{ sample.error.kind || '未提供' }} · HTTP：{{ sample.error.httpStatus ?? '未提供' }} · 发送状态：{{ sample.error.sendState ?? '未知' }}</p>
       <p class="muted">请求 ID：{{ sample.requestId ?? '未知' }}</p>
       <details><summary>测试题目</summary><pre v-if="sample.instructions">{{ sample.instructions }}</pre><pre>{{ sample.prompt }}</pre></details>
     </details>

@@ -44,7 +44,7 @@ impl Host {
             session
                 .set_call_budgets(gateway_plugin_sdk::CallBudgets::from([
                     (Stage::Management, 600_000),
-                    (Stage::Maintenance, 600_000),
+                    (Stage::Maintenance, 630_000),
                 ]))
                 .unwrap();
             session.run(handler).await.unwrap();
@@ -545,7 +545,81 @@ async fn timeout_releases_the_pending_callback() {
     let (_, value) = host.result(1, "", false, true).await;
     assert_eq!(value["record"]["status"], "failed");
     assert_eq!(value["record"]["samples"][0]["status"], "timeout");
+    assert_eq!(value["record"]["samples"][0]["error"]["origin"], "plugin");
+    assert_eq!(value["record"]["samples"][0]["error"]["timeoutMs"], 150000);
     assert!(host.consumed.contains(&callback_id));
+    host.shutdown().await;
+}
+
+#[tokio::test]
+async fn drawing_survives_the_old_deadline_and_finishes_in_background() {
+    let mut host = Host::start().await;
+    tokio::time::pause();
+    host.call(1, "api/submit", Some(run("long-drawing", "pelican")))
+        .await;
+    host.result(1, "", true, true).await;
+    host.maintenance(3, 630000).await;
+    let callback_id = host.pending_model().await;
+    tokio::time::advance(Duration::from_secs(165)).await;
+    host.reply(
+        callback_id,
+        json!({"request_id":"request-test","stream":"stream-test"}),
+        vec![],
+    )
+    .await;
+    assert_eq!(host.result(3, "<svg/>", true, true).await.0, 0);
+    let job = &host.jobs["tasks/long-drawing"].0;
+    assert_eq!(job["status"], "completed");
+    assert_eq!(job["verdict"], "output");
+    assert_eq!(job["attempts"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        host.jobs["samples/long-drawing-0"].0["answer"]["text"],
+        "<svg/>"
+    );
+    host.shutdown().await;
+}
+
+#[tokio::test]
+async fn drawing_has_a_finite_deadline_and_does_not_automatically_retry() {
+    let mut host = Host::start().await;
+    tokio::time::pause();
+    host.call(1, "api/submit", Some(run("drawing-timeout", "pelican")))
+        .await;
+    host.result(1, "", true, true).await;
+    host.maintenance(3, 630000).await;
+    let callback_id = host.pending_model().await;
+    tokio::time::advance(Duration::from_secs(601)).await;
+    host.result(3, "", false, true).await;
+    assert_eq!(host.jobs["tasks/drawing-timeout"].0["status"], "paused");
+    assert_eq!(host.jobs["tasks/drawing-timeout"].0["reason"], "timeout");
+    assert_eq!(
+        host.jobs["samples/drawing-timeout-0"].0["error"]["timeoutMs"],
+        600000
+    );
+    assert!(host.consumed.contains(&callback_id));
+    host.maintenance(5, 630000).await;
+    host.result(5, "", true, true).await;
+    assert_eq!(
+        host.jobs["tasks/drawing-timeout"].0["attempts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    host.shutdown().await;
+}
+
+#[tokio::test]
+async fn drawing_reserves_its_entire_window_before_sending() {
+    let mut host = Host::start().await;
+    host.call(1, "api/submit", Some(run("drawing-budget", "pelican")))
+        .await;
+    host.result(1, "", true, true).await;
+    host.maintenance(3, 600000).await;
+    host.result(3, "", true, true).await;
+    assert_eq!(host.executes, 0);
+    assert_eq!(host.jobs["tasks/drawing-budget"].0["status"], "queued");
+    assert!(host.jobs["tasks/drawing-budget"].0["pending"].is_null());
     host.shutdown().await;
 }
 

@@ -2,7 +2,7 @@
 from native_client import Client, WORK, ROOT
 import json,time,uuid,hashlib
 c=Client();state=json.loads((WORK/'state.json').read_text());checks=[]
-digest=hashlib.sha256((ROOT/'dist/cloudops.codex-candy-eval-1.2.0-x86_64-unknown-linux-gnu.tar.gz').read_bytes()).hexdigest()
+digest=hashlib.sha256((ROOT/'dist/cloudops.codex-candy-eval-1.2.1-x86_64-unknown-linux-gnu.tar.gz').read_bytes()).hexdigest()
 observation=json.loads((WORK/'host-observation.json').read_text());assert observation['runtime_root']==c.control['root']
 version=observation['version']
 def ok(name):
@@ -28,7 +28,7 @@ def count():
  time.sleep(1.1);return len(json.loads((WORK/'upstream-observations.json').read_text())['models'])
 before=c.route('api/history')[1]['records']
 details={r['id']:route('api/detail',{'id':r['id']})['record'] for r in before}
-_,digest=c.install(ROOT/'dist/cloudops.codex-candy-eval-1.2.0-x86_64-unknown-linux-gnu.tar.gz')
+_,digest=c.install(ROOT/'dist/cloudops.codex-candy-eval-1.2.1-x86_64-unknown-linux-gnu.tar.gz')
 upgraded=instance()['artifactSha256']!=digest
 if upgraded:c.api('/api/admin/plugins/instances/switch-version',{'id':state['instanceId'],'target':{'artifactSha256':digest,'expectedRevision':instance()['revision']}})
 assert instance()['running'] and not instance()['loadError']

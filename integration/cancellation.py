@@ -18,6 +18,6 @@ while time.monotonic()<deadline:
  if leases['total']==0:break
  time.sleep(.1)
 assert leases['total']==0,'Stopped task retained a Core account lease'
-result={'host':json.loads((WORK/'host-observation.json').read_text())['version'],'archive_sha256':hashlib.sha256((ROOT/'dist/cloudops.codex-candy-eval-1.2.0-x86_64-unknown-linux-gnu.tar.gz').read_bytes()).hexdigest(),'leases_before_stop':before,'leases_after_stop':leases['total'],'release_seconds':round(time.monotonic()-started,3),'controlled_upstream_only':True}
-(ROOT/'docs/cancellation-1.2.0.json').write_text(json.dumps(result,indent=2))
+result={'host':json.loads((WORK/'host-observation.json').read_text())['version'],'archive_sha256':hashlib.sha256((ROOT/'dist/cloudops.codex-candy-eval-1.2.1-x86_64-unknown-linux-gnu.tar.gz').read_bytes()).hexdigest(),'leases_before_stop':before,'leases_after_stop':leases['total'],'release_seconds':round(time.monotonic()-started,3),'controlled_upstream_only':True}
+(ROOT/'docs/cancellation-1.2.1.json').write_text(json.dumps(result,indent=2))
 print('PASS: Core lease observed, then released to zero after stop',flush=True)

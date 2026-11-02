@@ -21,7 +21,7 @@ python integration/tasks.py
 node integration/browser.mjs
 ```
 
-新宿主也可省略 --baseline，直接安装当前包。tasks.py 会明确区分原实例升级与当前包直接安装。compatibility.py 对最终归档验证账号与 Key、模型目录、旧状态、幂等糖果和完整三样本指纹，报告保存在 docs/compatibility-VERSION.json。
+新宿主也可省略 --baseline，直接安装当前包。tasks.py 会明确区分原实例升级与当前包直接安装。compatibility.py 对最终归档验证账号与 Key、模型目录、旧状态、幂等糖果和完整三样本指纹，当前报告保存在 docs/compatibility-1.2.1-VERSION.json。
 
 tasks.py 覆盖后台执行、重复提交、三份固定题目、SVG 输出、大事件流、失败暂停、无效样本、手动续测、取消、进程替换的未知消费、Key 作用域和删除。受控上游计数用于检查插件是否重复请求，不与上游 attempt 或真实用户 turn 混淆。
 
@@ -30,6 +30,14 @@ browser.mjs 读取已完成任务，通过真实宿主 iframe 与 CSP 检查报�
 旧的 business.py、lifecycle.py 和 optimization.py 保留同步接口与旧历史的回归；不代表新版页面仍驱动逐题执行。migration.py 是 1.1.1 的历史故障复现，不是 1.2 的默认验收入口。
 
 真实模型验收必须另外明确授权、固定请求预算及凭据处理范围。测试数据和控制信息保存在忽略的 .runtime/integration；不得把凭据、数据库或原始用户回答整体提交。公开证据只保留必要的次数、状态、样本有效性和有界汇总。
+
+## 1.2.1 慢绘图回归
+
+`eval-pelican-slow` 是本机受控 Responses 夹具：先发送响应创建事件，165 秒后才发送完整 SVG 和 usage，不调用真实模型。可用原始 1.2.0 包初始化隔离实例，运行 `pelican-timeout.py --old` 复现 150 秒取消；然后 `pelican-upgrade.py` 切换当前包、验证旧暂停任务及样本保留且不重发。最后运行 `pelican-timeout.py`，要求当前包保留完整 SVG、终态、用量与请求 ID，并按受控上游账本确认仅请求一次。两个对照各需等待约三分钟；不要用快速 SVG 夹具代替。
+
+最终归档的完整回归从全新官方 CPR 3.36.0 数据库起步，按顺序注册 3.38.2、3.39.0 两个矩阵目录，然后运行 `pelican-final-matrix.py`。该脚本用原始 1.2.0 包创建不完整绘图，再原实例升级最终包，逐级验证糖果与指纹，最后人工续测原任务，165 秒后完整返回 SVG。`eval-pelican-resume` 第一次故意缺失成功终态，第二次完整返回，题目和模型不变。随后在 Windows 执行 `node integration/tasks-browser.mjs` 和 `node integration/pelican-browser.mjs`，验证真实页面对失败后成功的预览及两次尝试导出。
+
+切换命令的索引取启动时注册顺序，实际运行版本必须与参数一致。宿主版本切换只用于临时数据库测试，不表示生产降级支持；不要在当前数据库上倒序做版本矩阵。
 
 ## 同库版本矩阵
 

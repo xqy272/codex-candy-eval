@@ -43,17 +43,19 @@ class Mock(http.server.BaseHTTPRequestHandler):
     calls=[];lock=threading.Lock();closed=0
     def log_message(self,*args):pass
     def do_GET(self):
-        data=json.dumps({'object':'list','data':[{'id':n,'object':'model','owned_by':'fixture'}for n in ['eval-candy','eval-fp','eval-pelican','eval-error','eval-incomplete','eval-slow','eval-large']]}).encode()
+        data=json.dumps({'object':'list','data':[{'id':n,'object':'model','owned_by':'fixture'}for n in ['eval-candy','eval-fp','eval-pelican','eval-pelican-slow','eval-pelican-resume','eval-error','eval-incomplete','eval-slow','eval-large']]}).encode()
         self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',len(data));self.end_headers();self.wfile.write(data)
     def do_POST(self):
         body=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))))
         model=body.get('model','')
-        with self.lock:self.calls.append({'model':model,'authorization':self.headers.get('Authorization'),'body':body});index=len(self.calls)
+        with self.lock:
+            self.calls.append({'model':model,'authorization':self.headers.get('Authorization'),'body':body});index=len(self.calls)
+            same_model_count=sum(c['model']==model for c in self.calls)
         if model=='eval-error':
             data=json.dumps({'error':{'message':'Isolated fixture failure','type':'invalid_request_error','code':'fixture_error'}}).encode()
             self.send_response(400);self.send_header('Content-Type','application/json');self.send_header('Content-Length',len(data));self.end_headers();self.wfile.write(data);return
         text='21'
-        if model=='eval-pelican':text='```html\n<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><rect width="360" height="200" fill="#eef5ff"/><circle cx="90" cy="150" r="30" fill="none" stroke="#246"/><circle cx="240" cy="150" r="30" fill="none" stroke="#246"/><text x="90" y="70">Pelican test fixture</text></svg>\n```'
+        if model in ['eval-pelican','eval-pelican-slow','eval-pelican-resume']:text='```html\n<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><rect width="360" height="200" fill="#eef5ff"/><circle cx="90" cy="150" r="30" fill="none" stroke="#246"/><circle cx="240" cy="150" r="30" fill="none" stroke="#246"/><text x="90" y="70">Pelican test fixture</text></svg>\n```'
         if model=='eval-fp':
             fixtures=json.loads((ROOT/'backend/tests/fixtures/fingerprint.json').read_text())
             content=json.dumps(body,ensure_ascii=False)
@@ -65,13 +67,18 @@ class Mock(http.server.BaseHTTPRequestHandler):
         item={'id':mid,'type':'message','role':'assistant','status':'completed','content':[{'type':'output_text','text':text,'annotations':[]}]}
         response={'id':rid,'object':'response','status':'completed','model':model,'output':[item],'usage':{'input_tokens':20,'output_tokens':5,'total_tokens':25,'input_tokens_details':{'cached_tokens':0},'output_tokens_details':{'reasoning_tokens':0}}}
         events=[('response.created',{'response':dict(response,status='in_progress',output=[])}),('response.output_item.added',{'output_index':0,'item':dict(item,status='in_progress',content=[])}),('response.content_part.added',{'item_id':mid,'output_index':0,'content_index':0,'part':{'type':'output_text','text':'','annotations':[]}}),('response.output_text.delta',{'item_id':mid,'output_index':0,'content_index':0,'delta':text}),('response.output_text.done',{'item_id':mid,'output_index':0,'content_index':0,'text':text}),('response.output_item.done',{'output_index':0,'item':item})]
-        if model!='eval-incomplete':events.append(('response.completed',{'response':response}))
+        if model!='eval-incomplete' and not(model=='eval-pelican-resume' and same_model_count==1):events.append(('response.completed',{'response':response}))
         if model=='eval-large':
             large=[('response.output_text.delta',{'item_id':mid,'output_index':0,'content_index':0,'delta':'','fixture_padding':'r'*8192}) for _ in range(800)]
             events=events[:3]+large+events[3:]
         data=''.join('event: '+kind+'\ndata: '+json.dumps(dict(type=kind,**payload))+'\n\n'for kind,payload in events).encode()
         self.send_response(200);self.send_header('Content-Type','text/event-stream');self.send_header('Content-Length',len(data));self.end_headers()
         try:
+            if model=='eval-pelican-slow' or (model=='eval-pelican-resume' and same_model_count>1):
+                first=data.index(b'\n\n')+2
+                self.wfile.write(data[:first]);self.wfile.flush()
+                time.sleep(165)
+                self.wfile.write(data[first:]);return
             if model=='eval-slow':time.sleep(10)
             self.wfile.write(data)
         except (BrokenPipeError,ConnectionResetError):

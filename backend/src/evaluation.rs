@@ -19,6 +19,15 @@ use std::{
 };
 use tokio::sync::watch;
 
+// Drawing can spend several minutes reasoning before producing SVG. Keep a
+// finite whole-request limit, independent of early headers/reasoning events.
+pub fn model_timeout(kind: &str) -> Duration {
+    Duration::from_secs(if kind == "pelican" { 600 } else { 150 })
+}
+pub fn required_budget(kind: &str) -> Duration {
+    model_timeout(kind) + Duration::from_secs(10)
+}
+
 fn default_profile() -> String {
     "simple-v1".into()
 }
@@ -225,7 +234,10 @@ pub async fn ask(
         biased;
         _=cancellation.cancelled()=>Err("cancelled"),
         _=cancel.changed()=>Err("cancelled"),
-        _=tokio::time::sleep(Duration::from_secs(150))=>Err("timeout"),
+        _=tokio::time::sleep(model_timeout(&req.kind))=>{
+            *diagnostic=Some(json!({"code":"plugin_deadline","kind":"request_deadline","timeoutMs":model_timeout(&req.kind).as_millis(),"origin":"plugin"}));
+            Err("timeout")
+        },
         result=execution=>result,
     };
     if let Some(stream) = stream_id {

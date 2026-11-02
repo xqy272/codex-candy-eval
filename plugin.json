@@ -3,11 +3,11 @@
   "name": "codex-candy-eval",
   "publisher": "cloudops",
   "displayName": "Codex 账号测试",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "糖果题、模型指纹和画鹈鹕测试",
   "license": "MIT",
   "engines": {
-    "codex-proxy-rs": ">=3.36.0, <3.39.0"
+    "codex-proxy-rs": ">=3.36.0, <3.40.0"
   },
   "main": "bin/plugin",
   "runtime": "trustedProcess",

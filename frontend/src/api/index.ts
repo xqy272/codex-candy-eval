@@ -1,6 +1,6 @@
 export interface Account { account_id: string; name: string; email: string | null; enabled: boolean }
 export interface ClientKey { id: string; name: string; enabled: boolean }
-export interface Sample { valid?: boolean; step?: number; error?: { code: string; kind?: string | null; httpStatus?: number | null; sendState?: string }; status: string; prompt: string; instructions: string; expectedCount: number | null; requestId: string | null; answer: { text: string; usage: Record<string, number | null> } | null; durationMs: number }
+export interface Sample { valid?: boolean; step?: number; error?: { code: string; kind?: string | null; httpStatus?: number | null; sendState?: string; timeoutMs?: number; origin?: string }; status: string; prompt: string; instructions: string; expectedCount: number | null; requestId: string | null; answer: { text: string; usage: Record<string, number | null> } | null; durationMs: number }
 export interface RecordEntry {
   task?: boolean; accountName?: string; validSamples?: number; verdict?: string; reason?: string | null; canResume?: boolean; updatedAt?: number; stopRequested?: boolean; attempts?: {key:string; step:number; status:string; valid:boolean}[]; sourceHashes?: unknown; pluginVersion?: string; summaryOnly?: boolean; id: string; accountId: string; kind: string; model: string; effort: string; status: string
   requestProfile?: string; startedAt: number; durationMs: number; samples: Sample[]; detectorVersion: string; expectedSamples?: number; gradingAnswer?: number

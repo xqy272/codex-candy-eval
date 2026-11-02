@@ -1,0 +1,8 @@
+{
+  "host": "3.39.0",
+  "archive_sha256": "646b554d85dd17b50e2e5d1c307212776efd8ba3db4928e7c3ca85f8b1559c07",
+  "leases_before_stop": 1,
+  "leases_after_stop": 0,
+  "release_seconds": 0.095,
+  "controlled_upstream_only": true
+}

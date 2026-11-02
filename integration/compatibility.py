@@ -5,7 +5,7 @@ c=Client();s=json.loads((WORK/'state.json').read_text())
 version=c.api('/api/admin/system/version')['version']
 (WORK/'host-observation.json').write_text(json.dumps({'version':version,'runtime_root':c.control['root'],'source':'GET /api/admin/system/version','observed_at':datetime.datetime.now(datetime.timezone.utc).isoformat()}))
 before=c.route('api/history')[1]
-_,digest=c.install(ROOT/'dist/cloudops.codex-candy-eval-1.2.0-x86_64-unknown-linux-gnu.tar.gz')
+_,digest=c.install(ROOT/'dist/cloudops.codex-candy-eval-1.2.1-x86_64-unknown-linux-gnu.tar.gz')
 i=next(i for i in c.api('/api/admin/plugins/instances') if i['id']==s['instanceId'])
 if i['artifactSha256']!=digest:c.api('/api/admin/plugins/instances/switch-version',{'id':i['id'],'target':{'artifactSha256':digest,'expectedRevision':i['revision']}})
 assert c.route('api/history')[1]==before
@@ -29,5 +29,5 @@ for req in requests:
  results.append({'kind':r['kind'],'verdict':r['verdict'],'validSamples':r['validSamples']})
 s['artifactSha256']=digest;(WORK/'state.json').write_text(json.dumps(s))
 report={'host':version,'archive_sha256':digest,'checks':['Current archive loads on native host','Existing private state retained','Account and Key catalog','Model catalog','Idempotent candy submission and answer 21','Three-sample background fingerprint and ranking'],'results':results}
-(ROOT/'docs'/('compatibility-'+version+'.json')).write_text(json.dumps(report,ensure_ascii=False,indent=2))
+(ROOT/'docs'/('compatibility-1.2.1-'+version+'.json')).write_text(json.dumps(report,ensure_ascii=False,indent=2))
 print('PASS: final archive compatibility on CPR '+version,flush=True)

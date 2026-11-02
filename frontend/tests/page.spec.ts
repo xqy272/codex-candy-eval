@@ -3,12 +3,12 @@ import { readFileSync } from 'node:fs'
 const asset = (name:string,type:string) => `data:${type};base64,${readFileSync(new URL(`../dist/${name}`,import.meta.url)).toString('base64')}`
 const csp = "default-src 'none'; script-src 'unsafe-inline' data:; style-src 'unsafe-inline' data:; img-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
 const html = readFileSync(new URL('../dist/index.html',import.meta.url),'utf8').replace('<head>',`<head><meta http-equiv="Content-Security-Policy" content="${csp}">`).replace('./app.js',asset('app.js','text/javascript')).replace('./app.css',asset('app.css','text/css'))
-async function mock(page:Page,options:{empty?:boolean;error?:boolean;queued?:boolean;paused?:boolean;dark?:boolean;pelican?:boolean}={}) {
+async function mock(page:Page,options:{empty?:boolean;error?:boolean;queued?:boolean;paused?:boolean;dark?:boolean;pelican?:boolean;timeout?:boolean;resumedDrawing?:boolean}={}) {
   await page.route('http://127.0.0.1:4173/',route => route.fulfill({contentType:'text/html',body:html}))
   await page.addInitScript(options => {
     document.addEventListener('DOMContentLoaded',()=>{document.body.style.background=options.dark?'#151b25':'#f6f8fb'})
     const saved=new Map<string,any>()
-    const attempts=(id:string) => [{key:id+'-0',step:0,status:'completed',valid:!options.paused}]
+    const attempts=(id:string) => options.resumedDrawing ? [{key:id+'-0',step:0,status:'timeout',valid:false},{key:id+'-1',step:0,status:'completed',valid:true}] : [{key:id+'-0',step:0,status:'completed',valid:!options.paused}]
     if(options.paused || options.pelican) saved.set('seed',{task:true,id:'seed',accountId:'a1',accountName:'测试账号 A',kind:options.pelican?'pelican':'fingerprint',model:'gpt-test',effort:'',requestProfile:'simple-v1',status:options.paused?'paused':'completed',reason:options.paused?'invalid_sample':null,verdict:'output',startedAt:Date.now(),updatedAt:1,durationMs:100,validSamples:options.paused?0:1,expectedSamples:options.paused?3:1,attempts:attempts('seed'),samples:[],attribution:null,canResume:!!options.paused})
     const encode=(value:any,status=200) => ({status,contentType:'application/json',body:new TextEncoder().encode(JSON.stringify(value)).buffer})
     ;(window as any).__requests=[]
@@ -25,7 +25,8 @@ async function mock(page:Page,options:{empty?:boolean;error?:boolean;queued?:boo
         saved.set(data.id,record);return encode({record})
       }
       if(input.path==='api/task') return encode({record:saved.get(data.id)})
-      if(input.path==='api/sample') return encode({sample:{status:'completed',valid:!options.paused,step:0,prompt:'固定题目',instructions:'',durationMs:100,requestId:'mock-request',answer:{text:options.pelican?'<svg width="300" height="180"><text x="20" y="80">Pelican</text><script>parent.__unsafe=true</script><image href="https://example.invalid/leak"/></svg>':'21',usage:{inputTokens:12}}}})
+      if(input.path==='api/sample' && options.resumedDrawing && data.key.endsWith('-0')) return encode({sample:{status:'timeout',valid:false,step:0,prompt:'固定题目',instructions:'',durationMs:150000,requestId:'first-timeout',answer:null}})
+      if(input.path==='api/sample') return encode({sample:{status:options.timeout?'timeout':'completed',valid:!options.paused,step:0,prompt:'固定题目',instructions:'',durationMs:options.timeout?600000:100,requestId:'mock-request',error:options.timeout?{code:'plugin_deadline',kind:'request_deadline',origin:'plugin',timeoutMs:600000}:null,answer:options.timeout?null:{text:options.pelican?'<svg width="300" height="180"><text x="20" y="80">Pelican</text><script>parent.__unsafe=true</script><image href="https://example.invalid/leak"/></svg>':'21',usage:{inputTokens:12}}}})
       if(input.path==='api/resume') {saved.get(data.id).status='queued';saved.get(data.id).canResume=false;return encode({})}
       if(input.path==='api/stop') {saved.get(data.id).status='stopped';saved.get(data.id).stopRequested=true;return encode({})}
       if(input.path==='api/delete') {saved.delete(data.id);return encode({})}
@@ -70,6 +71,25 @@ test('drawing report isolates generated SVG',async({page},info)=>{
   await mock(page,{pelican:true});await page.goto('/');await page.getByRole('button',{name:'历史',exact:true}).click();await page.getByRole('button',{name:'查看报告'}).click()
   await expect(page.getByAltText('鹈鹕绘图预览')).toBeVisible();expect(await page.evaluate(()=>(window as any).__unsafe)).toBeUndefined();expect(outbound).toEqual([])
   await page.screenshot({path:info.outputPath('drawing.png'),fullPage:true})
+})
+test('drawing explains its wait limit and identifies a plugin deadline',async({page})=>{
+  await mock(page,{pelican:true,paused:true,timeout:true});await page.goto('/')
+  await page.getByLabel('测试类型',{exact:true}).selectOption('pelican')
+  await expect(page.getByText(/每次最多等待 10 分钟/)).toBeVisible()
+  await page.getByRole('button',{name:'查看报告'}).click()
+  await page.locator('.report .sample > summary').click()
+  await expect(page.getByText(/已达到插件的 600 秒等待上限/)).toBeVisible()
+  await expect(page.getByText(/未取得最终用量，不代表未消耗额度/)).toBeVisible()
+  await expect(page.getByText(/宿主错误码/)).toHaveCount(0)
+  await expect(page.getByAltText('鹈鹕绘图预览')).toHaveCount(0)
+})
+test('drawing preview uses the successful resumed attempt after an initial timeout',async({page})=>{
+  await mock(page,{pelican:true,resumedDrawing:true});await page.goto('/')
+  await page.getByRole('button',{name:'历史',exact:true}).click()
+  await page.getByRole('button',{name:'查看报告'}).click()
+  await expect(page.locator('.report .sample')).toHaveCount(2)
+  await expect(page.getByAltText('鹈鹕绘图预览')).toBeVisible()
+  expect(await page.getByAltText('鹈鹕绘图预览').evaluate((image:HTMLImageElement)=>image.naturalWidth)).toBeGreaterThan(0)
 })
 test('deleting history requires explicit selection confirmation',async({page})=>{
   await mock(page,{pelican:true});await page.goto('/');await page.getByRole('button',{name:'历史',exact:true}).click();await page.getByRole('button',{name:'删除',exact:true}).click()
