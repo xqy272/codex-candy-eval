@@ -52,7 +52,7 @@ if __name__=='__main__':
  installed,digest=client.install(old)
  instances=client.api('/api/admin/plugins/instances')
  print('Verified and installed baseline; instance status:',[(v['enabled'],v['running'],v['loadError'])for v in instances if v['artifactSha256']==digest])
- for name,key in [('Eval account A','fixture-upstream-a'),('Eval account B','fixture-upstream-b')]:
+ for name,key in [(f'Eval account {letter}',f'fixture-upstream-{letter.lower()}')for letter in 'ABCDE']:
   result=client.api('/api/admin/accounts/import',{'provider':'openai','data':{'authentication_kind':'api_key','name':name,'base_url':'http://127.0.0.1:18381/v1','api_key':key,'transport':'http'}})
   print('Imported fixture:',name,'response fields',list(result))
  key=client.api('/api/admin/client-keys/create',{'name':'Eval client','groupIds':[],'maxConcurrency':2,'requestsPerMinute':0})

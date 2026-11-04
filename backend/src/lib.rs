@@ -6,6 +6,7 @@ mod management;
 pub mod migration;
 pub mod model;
 pub mod prompts;
+mod workspace;
 
 use gateway_plugin_sdk::client::{ComposedPlugin, PluginBuilder};
 use std::{path::Path, sync::Arc};

@@ -1,0 +1,214 @@
+{
+  "version": "3.38.2",
+  "archiveSha256": "a488ed3a0406f8ffb08fe010ba307b3cb80b940f3b8eabb79cb8e0a8d771bce1",
+  "stage": "compat",
+  "observedAt": "2026-11-04T16:06:17.274810+00:00",
+  "checks": [
+    "Final archive loads, retained old state, catalog, candy 21 and three-sample fingerprint"
+  ],
+  "productionRequests": 0,
+  "fixtureLedger": {
+    "peak": 2,
+    "account_peak": {
+      "A": 1,
+      "B": 1,
+      "C": 1,
+      "D": 1,
+      "E": 1
+    },
+    "timeline": [
+      {
+        "account": "A",
+        "start": 3710.074373064,
+        "model": "eval-candy",
+        "end": 3710.074489475
+      },
+      {
+        "account": "A",
+        "start": 3739.997203521,
+        "model": "eval-incomplete",
+        "end": 3739.997316907
+      },
+      {
+        "account": "A",
+        "start": 3770.741048382,
+        "model": "eval-batch",
+        "end": 3778.741315939
+      },
+      {
+        "account": "B",
+        "start": 3770.768507756,
+        "model": "eval-batch",
+        "end": 3772.768833498
+      },
+      {
+        "account": "B",
+        "start": 3772.827390415,
+        "model": "eval-batch",
+        "end": 3774.827721303
+      },
+      {
+        "account": "B",
+        "start": 3774.882707946,
+        "model": "eval-batch",
+        "end": 3776.882943131
+      },
+      {
+        "account": "B",
+        "start": 3776.933342215,
+        "model": "eval-batch",
+        "end": 3778.93361196
+      },
+      {
+        "account": "A",
+        "start": 3778.802660563,
+        "model": "eval-batch",
+        "end": 3786.803005203
+      },
+      {
+        "account": "B",
+        "start": 3778.983913179,
+        "model": "eval-batch",
+        "end": 3780.984187618
+      },
+      {
+        "account": "C",
+        "start": 3781.042228667,
+        "model": "eval-batch",
+        "end": 3783.042427798
+      },
+      {
+        "account": "D",
+        "start": 3783.097177821,
+        "model": "eval-batch",
+        "end": 3785.097513527
+      },
+      {
+        "account": "E",
+        "start": 3785.146674168,
+        "model": "eval-batch",
+        "end": 3787.147015284
+      },
+      {
+        "account": "A",
+        "start": 3786.849428654,
+        "model": "eval-batch",
+        "end": 3794.849698316
+      },
+      {
+        "account": "A",
+        "start": 3794.894008033,
+        "model": "eval-batch",
+        "end": 3802.894228513
+      },
+      {
+        "account": "A",
+        "start": 3833.048300597,
+        "model": "eval-partial",
+        "end": 3833.055555322
+      },
+      {
+        "account": "A",
+        "start": 3833.149371851,
+        "model": "eval-partial",
+        "end": 3833.156912684
+      },
+      {
+        "account": "A",
+        "start": 3833.240972545,
+        "model": "eval-partial",
+        "end": 3833.248075825
+      },
+      {
+        "account": "A",
+        "start": 3863.365103579,
+        "model": "eval-partial",
+        "end": 3863.37362679
+      },
+      {
+        "account": "A",
+        "start": 3893.499265103,
+        "model": "eval-slow",
+        "end": 3903.499469404
+      },
+      {
+        "account": "B",
+        "start": 3893.544044517,
+        "model": "eval-slow",
+        "end": 3903.544302367
+      },
+      {
+        "account": "B",
+        "start": 3903.612923858,
+        "model": "eval-slow",
+        "end": 3913.613117569
+      },
+      {
+        "account": "B",
+        "start": 3913.688953199,
+        "model": "eval-slow",
+        "end": 3923.689171165
+      },
+      {
+        "account": "A",
+        "start": 3953.850410055,
+        "model": "eval-slow",
+        "end": 3963.850649573
+      },
+      {
+        "account": "B",
+        "start": 3953.907229872,
+        "model": "eval-slow",
+        "end": 3963.907470118
+      },
+      {
+        "account": "A",
+        "start": 3984.185610366,
+        "model": "eval-candy",
+        "end": 3984.185742293
+      },
+      {
+        "account": "A",
+        "start": 4014.403956806,
+        "model": "eval-fp",
+        "end": 4014.410118624
+      },
+      {
+        "account": "A",
+        "start": 4014.552950764,
+        "model": "eval-fp",
+        "end": 4014.558488235
+      },
+      {
+        "account": "A",
+        "start": 4014.70175381,
+        "model": "eval-fp",
+        "end": 4014.708817084
+      },
+      {
+        "account": "A",
+        "start": 4056.665192777,
+        "model": "eval-candy",
+        "end": 4056.665355014
+      },
+      {
+        "account": "A",
+        "start": 4086.903559249,
+        "model": "eval-fp",
+        "end": 4086.917251405
+      },
+      {
+        "account": "A",
+        "start": 4087.071679526,
+        "model": "eval-fp",
+        "end": 4087.07820837
+      },
+      {
+        "account": "A",
+        "start": 4087.235810639,
+        "model": "eval-fp",
+        "end": 4087.242141768
+      }
+    ]
+  }
+}

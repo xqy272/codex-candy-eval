@@ -4,6 +4,18 @@ use gateway_plugin_sdk::call::{
     model::{CanonicalEvent, FinishReason, Usage, WirePayload},
 };
 use serde::{Deserialize, Serialize};
+#[derive(Default, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Progress {
+    pub phase: String,
+    pub step: usize,
+    pub started_at: u64,
+    pub last_event_at: Option<u64>,
+    pub request_id: Option<String>,
+    pub text_bytes: usize,
+    pub partial_text: String,
+    pub partial_truncated: bool,
+}
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,13 +25,18 @@ pub struct Answer {
     pub usage: Usage,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Decoder {
     answer: Answer,
     terminals: usize,
     failed: bool,
 }
 impl Decoder {
+    pub fn partial(&self) -> Answer {
+        let mut a = self.answer.clone();
+        a.completed = false;
+        a
+    }
     pub fn push(&mut self, bytes: &[u8]) -> Result<(), &'static str> {
         let batch = ModelEventBatch::decode(bytes).map_err(|_| "invalid_events")?;
         for event in batch.events {

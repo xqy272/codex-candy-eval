@@ -1,0 +1,18 @@
+{
+  "archiveSha256": "a488ed3a0406f8ffb08fe010ba307b3cb80b940f3b8eabb79cb8e0a8d771bce1",
+  "checks": [
+    "Actual CPR iframe CSP and bridge; localStorage throws SecurityError",
+    "Two-account fingerprint started in the actual UI: exactly 6 controlled calls",
+    "Always-visible request fields",
+    "Existing batch history and three-sample fingerprint ranking",
+    "Copy fallback exports saved samples and hashes",
+    "Generated SVG decodes inside real iframe",
+    "Host-private workspace restores the completed batch after reload without requests",
+    "Native host dark theme",
+    "390px layout without overflow"
+  ],
+  "pageErrors": [],
+  "productionRequests": 0,
+  "controlledUiCalls": 6,
+  "documentScreenshotScope": "Visible native iframe region; empty area clipped by the containing host viewport is excluded from document copies. Raw element captures remain in ignored runtime artifacts."
+}

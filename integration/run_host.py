@@ -40,29 +40,40 @@ def wait_url(url):
         except Exception:time.sleep(.25)
     raise RuntimeError('Server did not become ready')
 class Mock(http.server.BaseHTTPRequestHandler):
-    calls=[];lock=threading.Lock();closed=0
+    calls=[];lock=threading.Lock();closed=0;active=0;peak=0;per_account={};account_peak={}
+    def do_POST(self):
+        alias=self.headers.get("Authorization", "").rsplit("-",1)[-1].upper()
+        if alias not in list("ABCDE"):raise ValueError("Only controlled fixture credentials are accepted")
+        with self.lock:
+            type(self).active+=1;type(self).peak=max(self.peak,self.active);self.per_account[alias]=self.per_account.get(alias,0)+1;self.account_peak[alias]=max(self.account_peak.get(alias,0),self.per_account[alias])
+        self.observation={"account":alias,"start":time.monotonic(),"model":""}
+        try:self.respond()
+        finally:
+            with self.lock:
+                self.observation["end"]=time.monotonic();type(self).active-=1;self.per_account[alias]-=1
     def log_message(self,*args):pass
     def do_GET(self):
-        data=json.dumps({'object':'list','data':[{'id':n,'object':'model','owned_by':'fixture'}for n in ['eval-candy','eval-fp','eval-pelican','eval-pelican-slow','eval-pelican-resume','eval-error','eval-incomplete','eval-slow','eval-large']]}).encode()
+        data=json.dumps({'object':'list','data':[{'id':n,'object':'model','owned_by':'fixture'}for n in ['eval-candy','eval-fp','eval-pelican','eval-pelican-slow','eval-pelican-resume','eval-error','eval-incomplete','eval-slow','eval-large','eval-batch','eval-partial']]}).encode()
         self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',len(data));self.end_headers();self.wfile.write(data)
-    def do_POST(self):
+    def respond(self):
         body=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))))
         model=body.get('model','')
         with self.lock:
-            self.calls.append({'model':model,'authorization':self.headers.get('Authorization'),'body':body});index=len(self.calls)
+            self.observation.update({'model':model,'body':body});self.calls.append(self.observation);index=len(self.calls)
             same_model_count=sum(c['model']==model for c in self.calls)
         if model=='eval-error':
             data=json.dumps({'error':{'message':'Isolated fixture failure','type':'invalid_request_error','code':'fixture_error'}}).encode()
             self.send_response(400);self.send_header('Content-Type','application/json');self.send_header('Content-Length',len(data));self.end_headers();self.wfile.write(data);return
         text='21'
         if model in ['eval-pelican','eval-pelican-slow','eval-pelican-resume']:text='```html\n<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><rect width="360" height="200" fill="#eef5ff"/><circle cx="90" cy="150" r="30" fill="none" stroke="#246"/><circle cx="240" cy="150" r="30" fill="none" stroke="#246"/><text x="90" y="70">Pelican test fixture</text></svg>\n```'
-        if model=='eval-fp':
+        if model in ['eval-fp','eval-partial']:
             fixtures=json.loads((ROOT/'backend/tests/fixtures/fingerprint.json').read_text())
             content=json.dumps(body,ensure_ascii=False)
             suite=json.loads((ROOT/'data/enrollment-suite.json').read_text())
             count=next((c['expected_count']for c in suite if c['prompt'] in content.replace('\\n','\n')),240)
             numbers=re.findall(r'\d+',fixtures[(index-1)%3]['text'])
             text=json.dumps((numbers*4)[:count])
+            if model=='eval-partial' and same_model_count==3:text='invalid controlled sample'
         rid='resp_fixture_'+str(index);mid='msg_fixture_'+str(index)
         item={'id':mid,'type':'message','role':'assistant','status':'completed','content':[{'type':'output_text','text':text,'annotations':[]}]}
         response={'id':rid,'object':'response','status':'completed','model':model,'output':[item],'usage':{'input_tokens':20,'output_tokens':5,'total_tokens':25,'input_tokens_details':{'cached_tokens':0},'output_tokens_details':{'reasoning_tokens':0}}}
@@ -80,6 +91,7 @@ class Mock(http.server.BaseHTTPRequestHandler):
                 time.sleep(165)
                 self.wfile.write(data[first:]);return
             if model=='eval-slow':time.sleep(10)
+            if model=='eval-batch':time.sleep(8 if self.observation['account']=='A' else 2)
             self.wfile.write(data)
         except (BrokenPipeError,ConnectionResetError):
             with self.lock:self.closed+=1
@@ -151,7 +163,7 @@ try:
 
         if app.poll() is not None:raise RuntimeError('CPR host exited')
         temporary=WORK/'upstream-observations.tmp'
-        temporary.write_text(json.dumps({'models':[c['model']for c in Mock.calls],'closed':Mock.closed,'request_facts':[{'model':c['model'],'instructions_chars':len(c['body'].get('instructions','')),'input_items':len(c['body'].get('input',[])),'tools':len(c['body'].get('tools',[])),'tool_choice':c['body'].get('tool_choice')}for c in Mock.calls]}))
+        temporary.write_text(json.dumps({'models':[c['model']for c in Mock.calls],'closed':Mock.closed,'peak':Mock.peak,'active':Mock.active,'account_peak':Mock.account_peak,'timeline':[{k:v for k,v in c.items() if k!='body'}for c in Mock.calls],'request_facts':[{'model':c['model'],'instructions_chars':len(c['body'].get('instructions','')),'input_items':len(c['body'].get('input',[])),'tools':len(c['body'].get('tools',[])),'tool_choice':c['body'].get('tool_choice')}for c in Mock.calls]}))
         temporary.replace(WORK/'upstream-observations.json')
         time.sleep(1)
 finally:

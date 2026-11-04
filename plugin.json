@@ -2,8 +2,8 @@
   "manifestVersion": 2,
   "name": "codex-candy-eval",
   "publisher": "cloudops",
-  "displayName": "Codex 账号测试",
-  "version": "1.2.1",
+  "displayName": "模型测试",
+  "version": "1.3.0",
   "description": "糖果题、模型指纹和画鹈鹕测试",
   "license": "MIT",
   "engines": {
@@ -116,6 +116,17 @@
       },
       "maximumRecords": 1,
       "maximumBytes": 262144,
+      "maximumValueBytes": 262144,
+      "migratesFrom": []
+    },
+    {
+      "namespace": "batches",
+      "schemaVersion": 1,
+      "schema": {
+        "type": "object"
+      },
+      "maximumRecords": 129,
+      "maximumBytes": 4194304,
       "maximumValueBytes": 262144,
       "migratesFrom": []
     }

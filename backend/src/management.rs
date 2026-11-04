@@ -14,13 +14,30 @@ use gateway_plugin_sdk::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::watch;
 
 pub struct AppState {
     pub detector: lmfpd::Detector,
     pub(crate) active: Mutex<Option<Active>>,
     pub(crate) admission: tokio::sync::Mutex<()>,
+    pub(crate) workers: Mutex<HashMap<String, Worker>>,
+}
+pub(crate) struct Worker {
+    pub account_id: String,
+    pub cancel: watch::Sender<bool>,
+    pub progress: Arc<Mutex<crate::model::Progress>>,
+}
+pub(crate) struct WorkerGuard(pub Arc<AppState>, pub String);
+impl Drop for WorkerGuard {
+    fn drop(&mut self) {
+        if let Ok(mut workers) = self.0.workers.lock() {
+            workers.remove(&self.1);
+        }
+    }
 }
 pub(crate) struct Active {
     pub(crate) id: String,
@@ -32,6 +49,7 @@ impl AppState {
             detector,
             active: Mutex::new(None),
             admission: tokio::sync::Mutex::new(()),
+            workers: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -71,6 +89,12 @@ pub fn registration() -> ManagementRegistration {
             route("POST", "api/resume"),
             route("POST", "api/stop"),
             route("POST", "api/delete"),
+            route("GET", "api/batches"),
+            route("GET", "api/workspace"),
+            route("POST", "api/workspace"),
+            route("POST", "api/batch-submit"),
+            route("POST", "api/batch-stop"),
+            route("POST", "api/account-stop"),
         ],
         resources: ["web/index.html", "web/app.js", "web/app.css"]
             .into_iter()
@@ -81,7 +105,7 @@ pub fn registration() -> ManagementRegistration {
             .collect(),
         pages: vec![ManagementPage {
             id: "codex-candy-eval".into(),
-            title: "Codex 账号测试".into(),
+            title: "模型测试".into(),
             description: Some("糖果题、模型指纹与画鹈鹕".into()),
             entry: "web/index.html".into(),
             icon: None,
@@ -135,6 +159,12 @@ struct CancelRequest {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct AccountStop {
+    id: String,
+    account_id: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SampleRequest {
     id: String,
     key: String,
@@ -150,9 +180,9 @@ pub async fn handle(
         Err(error) => {
             // 展示本插件固定提示，不将宿主内部错误正文或请求头写入页面
             let (status, message) = match error.code {
-                ErrorCode::InvalidInput => (400, "请求字段或正文无效"),
+                ErrorCode::InvalidInput => (400, "请检查目标、模型和请求参数"),
                 ErrorCode::Conflict | ErrorCode::Capacity => {
-                    (409, "已有测试正在运行或记录发生冲突")
+                    (409, "提交或状态发生冲突，请刷新后重试原操作")
                 }
                 ErrorCode::Cancelled => (409, "测试已取消"),
                 ErrorCode::PermissionDenied | ErrorCode::Rejected => {
@@ -162,9 +192,34 @@ pub async fn handle(
             };
             reply(
                 status,
-                json!({"error":{"code":error.code,"message":message}}),
+                json!({"error":{"code":error.code,"message": safe_message(&error.message).unwrap_or(message)}}),
             )
         }
+    }
+}
+fn safe_message(message: &str) -> Option<&str> {
+    // Only authored messages are public; host faults may contain private diagnostics.
+    match message {
+        "批次目标、次数或并行上限无效"
+        | "页面草稿参数无效"
+        | "页面草稿已在其他页面变化，请刷新读取"
+        | "相同批次 ID 不可改变检测条件"
+        | "未结束检测最多 16 份，请减少账号或次数，或先处理已有检测"
+        | "请选择有效的模型、Key 和测试条件"
+        | "请在已有批次结束后调整实例并行上限"
+        | "请先处理已有批次"
+        | "批次不存在"
+        | "账号不属于此批次"
+        | "记录超过存储上限"
+        | "请先清理已结束的检测"
+        | "任务已清理"
+        | "任务不存在"
+        | "该批次已停止，请新建检测"
+        | "请先停止活动任务"
+        | "该任务不能继续，请新建检测"
+        | "检测器或参考资源已变化，请新建检测"
+        | "上游身份已改变或账号不可用，请新建检测" => Some(message),
+        _ => None,
     }
 }
 async fn dispatch(
@@ -180,11 +235,25 @@ async fn dispatch(
         return Err(fault(ErrorCode::InvalidInput, "读取接口不能带正文"));
     }
     match (call.request.method.as_str(), call.request.path.as_str()) {
-        ("GET", "api/tasks") => crate::jobs::list(&call.host).await,
+        ("GET", "api/tasks") => crate::jobs::list(&state, &call.host).await,
+        ("GET", "api/workspace") => crate::workspace::get(&call.host).await,
+        ("POST", "api/workspace") => crate::workspace::save(&state, &call.host, body(call)?).await,
+        ("GET", "api/batches") => crate::jobs::batches(&call.host).await,
+        ("POST", "api/batch-submit") => {
+            crate::jobs::submit_batch(&state, &call.host, body(call)?).await
+        }
+        ("POST", "api/batch-stop") => {
+            let req: CancelRequest = body(call)?;
+            crate::jobs::stop_batch(&state, &call.host, &req.id).await
+        }
+        ("POST", "api/account-stop") => {
+            let req: AccountStop = body(call)?;
+            crate::jobs::stop_account(&state, &call.host, &req.id, &req.account_id).await
+        }
         ("POST", "api/submit") => crate::jobs::submit(&state, &call.host, body(call)?).await,
         ("POST", "api/task") => {
             let req: CancelRequest = body(call)?;
-            crate::jobs::report(&call.host, &req.id).await
+            crate::jobs::report_observed(&state, &call.host, &req.id).await
         }
         ("POST", "api/sample") => {
             let req: SampleRequest = body(call)?;

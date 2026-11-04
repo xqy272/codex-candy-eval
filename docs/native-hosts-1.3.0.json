@@ -1,0 +1,18 @@
+{
+  "observedAt": "2026-11-04T16:13:02.236628+00:00",
+  "identitySource": "Explicit run_host.py registered release directories; actual running binary SHA-256; no external release lookup",
+  "hosts": [
+    {
+      "version": "3.36.0",
+      "binarySha256": "bcfadc5bb49f3fce3de38775b0387c27c6bac691ebf5e82f29aed3b6783ea298"
+    },
+    {
+      "version": "3.38.2",
+      "binarySha256": "d6ae57c1b6857f101a7a287ad6ef93faa697e7c68eb7c1ac3e2db3599c21831c"
+    },
+    {
+      "version": "3.39.0",
+      "binarySha256": "64b7a6caa63aa5ab4ae4cfe2a4900c187a1e6825f745ca019594e51f67cd75db"
+    }
+  ]
+}

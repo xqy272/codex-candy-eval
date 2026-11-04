@@ -1,0 +1,49 @@
+{
+  "observedAt": "2026-11-04T16:15:36.618985+00:00",
+  "version": "1.3.0",
+  "baseCommit": "c1dfb0eb0a002a376dc5938c76c244ca232f432b",
+  "archive": {
+    "sha256": "a488ed3a0406f8ffb08fe010ba307b3cb80b940f3b8eabb79cb8e0a8d771bce1",
+    "bytes": 6691068,
+    "binarySha256": "e16cb8e511b94c18c5efaf0435a6e1c79f6f13081b1012bcd1708d621d316813",
+    "maximumGlibc": "GLIBC_2.28",
+    "originalStateDeclarationsUnchanged": true,
+    "frontendMatchesArchive": true
+  },
+  "rustTestsPassed": 37,
+  "uiTestsPassed": 16,
+  "rustFmt": true,
+  "allTargetsClippyWarningsDenied": true,
+  "frontendProductionBuild": true,
+  "fixedSourcesVerified": 92,
+  "nativeReports": [
+    "native-1.3.0-3.36.0-full.json",
+    "native-1.3.0-3.38.2-compat.json",
+    "native-1.3.0-3.39.0-capacity.json",
+    "native-1.3.0-3.39.0-compat.json",
+    "native-1.3.0-3.39.0-drawing.json",
+    "native-1.3.0-3.39.0-restart.json"
+  ],
+  "nativeHostIdentity": "native-hosts-1.3.0.json",
+  "nativeUi": "workbench-ui-1.3.0.json",
+  "controlledRequests": 59,
+  "controlledModelCounts": {
+    "eval-batch": 27,
+    "eval-candy": 4,
+    "eval-fp": 15,
+    "eval-incomplete": 1,
+    "eval-partial": 4,
+    "eval-pelican-slow": 1,
+    "eval-slow": 7
+  },
+  "realModelRequests": 0,
+  "productionModified": false,
+  "temporaryResourcesRemoved": true,
+  "cleanup": "credentials-cleanup-1.3.0.json",
+  "published": false,
+  "limits": [
+    "Controlled fixtures validate requests, persistence, concurrency and UI; they do not establish fingerprint identification accuracy.",
+    "Linux x86_64, GLIBC_2.28; native host releases 3.36.0, 3.38.2 and 3.39.0 tested; other versions not tested here.",
+    "Old synchronous report and paused-task upgrade from 1.2.1 was tested; old schema migrations remain covered by Rust tests, not a new full historical native matrix."
+  ]
+}

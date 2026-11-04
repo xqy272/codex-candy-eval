@@ -137,6 +137,17 @@ pub async fn ask(
     cancel: &mut watch::Receiver<bool>,
     diagnostic: &mut Option<Value>,
 ) -> Result<(String, model::Answer), (Option<String>, &'static str)> {
+    ask_observed(host, cancellation, req, p, cancel, diagnostic, None).await
+}
+pub async fn ask_observed(
+    host: &HostClient,
+    cancellation: &CallCancellation,
+    req: &RunRequest,
+    p: &Planned,
+    cancel: &mut watch::Receiver<bool>,
+    diagnostic: &mut Option<Value>,
+    progress: Option<&std::sync::Mutex<model::Progress>>,
+) -> Result<(String, model::Answer), (Option<String>, &'static str)> {
     if *cancel.borrow() {
         return Err((None, "cancelled"));
     }
@@ -184,6 +195,7 @@ pub async fn ask(
     // 同一父调用内拉取有界分块，不累计 reasoning/wire 等整轮原始事件
     let mut request_id = None;
     let mut stream_id = None;
+    let mut decoder = model::Decoder::default();
     let execution = async {
         let (started, _): (ModelStreamResult, _) = history::callback(
             host,
@@ -200,7 +212,10 @@ pub async fn ask(
         })?;
         request_id = Some(started.request_id);
         stream_id = Some(started.stream.clone());
-        let mut decoder = model::Decoder::default();
+        if let Some(p) = progress.and_then(|p| p.lock().ok()).as_mut() {
+            p.phase = "waiting_events".into();
+            p.request_id = request_id.clone();
+        }
         loop {
             let (chunk, payload): (ModelStreamReadResult, _) = history::callback(
                 host,
@@ -220,13 +235,31 @@ pub async fn ask(
         })?;
             if !payload.is_empty() {
                 decoder.push(&payload)?;
+                if let Some(p) = progress.and_then(|p| p.lock().ok()).as_mut() {
+                    let a = decoder.partial();
+                    p.last_event_at = Some(
+                        SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64,
+                    );
+                    p.text_bytes = a.text.len();
+                    p.phase = if a.text.is_empty() {
+                        "receiving_events"
+                    } else {
+                        "receiving_text"
+                    }
+                    .into();
+                    p.partial_text = a.text.chars().take(4096).collect();
+                    p.partial_truncated = p.partial_text.len() < a.text.len();
+                }
             }
             if chunk.end {
                 break;
             }
         }
         let facts = decoder.diagnostic();
-        decoder.finish().inspect_err(|_| {
+        decoder.clone().finish().inspect_err(|_| {
             *diagnostic = Some(facts);
         })
     };
@@ -240,6 +273,13 @@ pub async fn ask(
         },
         result=execution=>result,
     };
+    if result.is_err() {
+        let partial = decoder.partial();
+        if !partial.text.is_empty() {
+            let detail = diagnostic.get_or_insert_with(|| json!({}));
+            detail["partialAnswer"] = json!(partial);
+        }
+    }
     if let Some(stream) = stream_id {
         // 正常 EOF、错误、用户取消均显式关闭；父取消由宿主再次兜底回收
         let _ = tokio::time::timeout(

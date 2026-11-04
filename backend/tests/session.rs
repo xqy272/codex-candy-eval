@@ -23,6 +23,8 @@ struct Host {
     identity: String,
     credential_revision: u64,
     fail_task_save: bool,
+    fail_create_task: bool,
+    fail_create_batch: bool,
     failure_after: Option<usize>,
     details: std::collections::HashMap<String, (Value, u64)>,
     version: u64,
@@ -59,6 +61,8 @@ impl Host {
             identity: "user-test".into(),
             credential_revision: 1,
             fail_task_save: false,
+            fail_create_task: false,
+            fail_create_batch: false,
             failure_after: None,
             details: Default::default(),
             version: 0,
@@ -205,7 +209,7 @@ impl Host {
                             .await;
                     }
                     "host.state.get" | "host.state.put" | "host.state.delete"
-                        if ["queue", "tasks", "samples"]
+                        if ["queue", "tasks", "samples", "batches"]
                             .iter()
                             .any(|ns| params["namespace"] == *ns) =>
                     {
@@ -222,11 +226,18 @@ impl Host {
                                 self.reply(id, json!({"record":value}), vec![]).await;
                             }
                             "host.state.put" => {
-                                if self.fail_task_save
-                                    && params["namespace"] == "tasks"
-                                    && params["value"]["status"] != "running"
-                                    && self.jobs.contains_key(&key)
+                                if (params["namespace"] == "batches"
+                                    && self.fail_create_batch
+                                    && params["key"] != "index"
+                                    && params["key"] != "settings")
+                                    || params["namespace"] == "tasks"
+                                        && (self.fail_create_task
+                                            || self.fail_task_save
+                                                && params["value"]["status"] != "running"
+                                                && self.jobs.contains_key(&key))
                                 {
+                                    self.fail_create_batch = false;
+                                    self.fail_create_task = false;
                                     self.fail_task_save = false;
                                     self.send(Frame::control(Message::Error {
                                         id,
@@ -370,7 +381,7 @@ impl Host {
                             .await;
                     }
                     "host.state.get" | "host.state.put" | "host.state.delete"
-                        if ["queue", "tasks", "samples"]
+                        if ["queue", "tasks", "samples", "batches"]
                             .iter()
                             .any(|ns| params["namespace"] == *ns) =>
                     {
@@ -387,11 +398,13 @@ impl Host {
                                 self.reply(id, json!({"record":value}), vec![]).await;
                             }
                             "host.state.put" => {
-                                if self.fail_task_save
-                                    && params["namespace"] == "tasks"
-                                    && params["value"]["status"] != "running"
-                                    && self.jobs.contains_key(&key)
+                                if params["namespace"] == "tasks"
+                                    && (self.fail_create_task
+                                        || self.fail_task_save
+                                            && params["value"]["status"] != "running"
+                                            && self.jobs.contains_key(&key))
                                 {
+                                    self.fail_create_task = false;
                                     self.fail_task_save = false;
                                     self.send(Frame::control(Message::Error {
                                         id,
@@ -960,5 +973,179 @@ async fn stable_upstream_identity_allows_credential_refresh() {
     h.result(3, "21", true, true).await;
     assert_eq!(h.executes, 1);
     assert_eq!(h.jobs["tasks/refresh"].0["verdict"], "correct");
+    h.shutdown().await;
+}
+
+fn batch(id: &str, kind: &str, repeats: usize) -> Value {
+    json!({"id":id,"accountIds":["account-test"],"clientKeyId":"key-test","model":"gpt-test","effort":"","kind":kind,"profile":"simple-v1","repeats":repeats,"concurrency":2,"outputVersion":"svg-v1"})
+}
+#[tokio::test]
+async fn batch_repeats_are_idempotent_and_freeze_conditions() {
+    let mut h = Host::start().await;
+    let req = batch("repeat-batch", "candy", 3);
+    for id in [1, 3] {
+        h.call(id, "api/batch-submit", Some(req.clone())).await;
+        let (status, result) = h.result(id, "21", true, true).await;
+        assert_eq!(status, 200);
+        assert_eq!(result["batch"]["taskIds"].as_array().unwrap().len(), 3);
+        assert!(result["batch"].get("prepared").is_none());
+    }
+    assert_eq!(h.executes, 0);
+    let frozen = h.jobs["tasks/repeat-batch-0-0"].0.clone();
+    let mut changed = req;
+    changed["profile"] = json!("codex-context-v1");
+    h.call(5, "api/batch-submit", Some(changed)).await;
+    assert_eq!(h.result(5, "", false, true).await.0, 409);
+    assert_eq!(h.jobs["tasks/repeat-batch-0-0"].0, frozen);
+    h.maintenance(7, 180000).await;
+    h.result(7, "21", true, true).await;
+    assert_eq!(h.executes, 3);
+    for n in 0..3 {
+        assert_eq!(
+            h.jobs[&format!("tasks/repeat-batch-0-{n}")].0["verdict"],
+            "correct"
+        );
+    }
+    h.shutdown().await;
+}
+#[tokio::test]
+async fn batch_stop_is_durable_and_does_not_consume_or_resume() {
+    let mut h = Host::start().await;
+    h.call(1, "api/batch-submit", Some(batch("stop-batch", "candy", 3)))
+        .await;
+    assert_eq!(h.result(1, "", false, true).await.0, 200);
+    h.call(3, "api/batch-stop", Some(json!({"id":"stop-batch"})))
+        .await;
+    assert_eq!(h.result(3, "", false, true).await.0, 200);
+    h.maintenance(5, 180000).await;
+    h.result(5, "21", true, true).await;
+    assert_eq!(h.executes, 0);
+    for n in 0..3 {
+        assert_eq!(
+            h.jobs[&format!("tasks/stop-batch-0-{n}")].0["status"],
+            "stopped"
+        );
+    }
+    h.call(7, "api/resume", Some(json!({"id":"stop-batch-0-0"})))
+        .await;
+    assert_eq!(h.result(7, "", false, true).await.0, 409);
+    h.shutdown().await;
+}
+#[tokio::test]
+async fn batch_validation_rejects_reserved_ids_and_duplicate_accounts() {
+    let mut h = Host::start().await;
+    for (n, id) in ["index", "settings", "workspace"].iter().enumerate() {
+        h.call(
+            1 + n as u64 * 2,
+            "api/batch-submit",
+            Some(batch(id, "candy", 1)),
+        )
+        .await;
+        assert_eq!(h.result(1 + n as u64 * 2, "", false, true).await.0, 400);
+    }
+    let mut req = batch("bad", "candy", 1);
+    req["accountIds"] = json!(["account-test", "account-test"]);
+    h.call(9, "api/batch-submit", Some(req)).await;
+    assert_eq!(h.result(9, "", false, true).await.0, 400);
+    assert_eq!(h.executes, 0);
+    assert!(h.jobs.is_empty());
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn stopping_a_batch_account_covers_repeats_and_blocks_future_resume() {
+    let mut h = Host::start().await;
+    h.call(
+        1,
+        "api/batch-submit",
+        Some(batch("account-stop", "candy", 3)),
+    )
+    .await;
+    assert_eq!(h.result(1, "", false, true).await.0, 200);
+    h.call(
+        3,
+        "api/account-stop",
+        Some(json!({"id":"account-stop","account_id":"account-test"})),
+    )
+    .await;
+    assert_eq!(h.result(3, "", false, true).await.0, 200);
+    assert_eq!(
+        h.jobs["batches/account-stop"].0["stoppedAccounts"],
+        json!(["account-test"])
+    );
+    h.maintenance(5, 180000).await;
+    h.result(5, "21", true, true).await;
+    for n in 0..3 {
+        assert_eq!(
+            h.jobs[&format!("tasks/account-stop-0-{n}")].0["status"],
+            "stopped"
+        );
+    }
+    assert_eq!(h.executes, 0);
+    h.call(7, "api/resume", Some(json!({"id":"account-stop-0-0"})))
+        .await;
+    assert_eq!(h.result(7, "", false, true).await.0, 409);
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn interrupted_batch_creation_recovers_frozen_plan_without_early_execution() {
+    let mut h = Host::start().await;
+    h.fail_create_task = true;
+    let req = batch("creation-recovery", "fingerprint", 1);
+    h.call(1, "api/batch-submit", Some(req.clone())).await;
+    assert_eq!(h.result(1, "", false, true).await.0, 409);
+    let frozen = h.jobs["batches/creation-recovery"].0["prepared"][0]["plan"].clone();
+    assert!(frozen.is_array());
+    h.maintenance(3, 180000).await;
+    h.result(3, "", false, true).await;
+    assert_eq!(h.executes, 0);
+    h.call(5, "api/batch-submit", Some(req)).await;
+    assert_eq!(h.result(5, "", false, true).await.0, 200);
+    assert_eq!(h.jobs["tasks/creation-recovery-0-0"].0["plan"], frozen);
+    assert_eq!(h.jobs["batches/creation-recovery"].0["ready"], true);
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn failed_initial_batch_commit_does_not_duplicate_the_reserved_index() {
+    let mut h = Host::start().await;
+    h.fail_create_batch = true;
+    let req = batch("reserved-index", "candy", 1);
+    h.call(1, "api/batch-submit", Some(req.clone())).await;
+    assert_eq!(h.result(1, "", false, true).await.0, 409);
+    assert_eq!(h.jobs["batches/index"].0["ids"], json!(["reserved-index"]));
+    assert!(!h.jobs.contains_key("batches/reserved-index"));
+    h.call(3, "api/batch-submit", Some(req)).await;
+    assert_eq!(h.result(3, "", false, true).await.0, 200);
+    assert_eq!(h.jobs["batches/index"].0["ids"], json!(["reserved-index"]));
+    assert_eq!(h.executes, 0);
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn host_private_workspace_survives_reload_and_rejects_stale_writes() {
+    let mut h = Host::start().await;
+    h.call(1, "api/workspace", None).await;
+    let (status, body) = h.result(1, "", false, true).await;
+    assert_eq!(status, 200);
+    assert_eq!(body["draft"], Value::Null);
+    let draft = json!({"kind":"candy","model":"model-test","keyId":"key-test",
+        "selected":["account-test"],"focus":"account-test","batchId":"",
+        "drafts":{},"pending":batch("recover-id","candy",1),"effort":"",
+        "profile":"simple-v1","repeats":1,"outputVersion":"svg-v1"});
+    let save = json!({"draft":draft,"expectedVersion":null});
+    h.call(3, "api/workspace", Some(save.clone())).await;
+    let (status, saved) = h.result(3, "", false, true).await;
+    assert_eq!(status, 200);
+    assert!(saved["version"].is_number());
+    h.call(5, "api/workspace", None).await;
+    let (status, restored) = h.result(5, "", false, true).await;
+    assert_eq!(status, 200);
+    assert_eq!(restored["draft"], draft);
+    h.call(7, "api/workspace", Some(save)).await;
+    assert_eq!(h.result(7, "", false, true).await.0, 409);
+    assert_eq!(h.executes, 0);
+    assert_eq!(h.jobs["batches/workspace"].0, draft);
     h.shutdown().await;
 }
