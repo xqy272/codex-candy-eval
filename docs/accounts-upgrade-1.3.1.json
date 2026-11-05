@@ -1,0 +1,10 @@
+{
+  "observedAtUtc": "2026-11-05T02:06:55.206455+00:00",
+  "baselineSha256": "a488ed3a0406f8ffb08fe010ba307b3cb80b940f3b8eabb79cb8e0a8d771bce1",
+  "archiveSha256": "826554e0fcb4d8dfbfc29eb4882daaf8541dc78de29a0d28a763d779e9721f88",
+  "sameInstance": true,
+  "allPrivateStateDeclarationsUnchanged": true,
+  "snapshotWorkspaceTasksHistoryBatchesUnchanged": true,
+  "controlledModelCalls": 0,
+  "realModelRequests": 0
+}

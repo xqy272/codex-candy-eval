@@ -22,6 +22,7 @@ async function mock(
     uncertain?: boolean
     opaque?: boolean
     conflict?: boolean
+    accounts?: { account_id: string; name: string; email: string | null; enabled: boolean }[]
   } = {},
 ) {
   await page.route('http://127.0.0.1:4173/', (r) =>
@@ -64,11 +65,11 @@ async function mock(
               return encode({
                 accounts: o.empty
                   ? []
-                  : [
+                  : (o.accounts ?? [
                       { account_id: 'a1', name: '测试账号 A', enabled: true },
                       { account_id: 'a2', name: '测试账号 B', enabled: true },
                       { account_id: 'a3', name: '停用账号', enabled: false },
-                    ],
+                    ]),
                 keys: o.empty ? [] : [{ id: 'k1', name: 'personal-codex', enabled: true }],
               })
             case 'api/models':
@@ -108,7 +109,9 @@ async function mock(
                       ...d,
                       id,
                       accountId,
-                      accountName: accountId === 'a1' ? '测试账号 A' : '测试账号 B',
+                      accountName:
+                        o.accounts?.find((a) => a.account_id === accountId)?.name ??
+                        (accountId === 'a1' ? '测试账号 A' : '测试账号 B'),
                       batchId: d.id,
                       task: true,
                       requestProfile: d.profile,
@@ -278,6 +281,64 @@ test('read errors are actionable', async ({ page }) => {
   await mock(page, { error: true })
   await page.goto('/')
   await expect(page.getByRole('alert')).toHaveText('模拟读取失败')
+})
+test('unnamed accounts stay identifiable without changing enabled state or selected IDs', async ({
+  page,
+}) => {
+  await mock(page, {
+    accounts: [
+      {
+        account_id: 'named',
+        name: '  自定义名称  ',
+        email: 'named@example.invalid',
+        enabled: true,
+      },
+      { account_id: 'email-only', name: '', email: '  mailbox@example.invalid  ', enabled: true },
+      { account_id: 'stable-account-id', name: ' \u3000 ', email: ' ', enabled: true },
+      { account_id: 'disabled-id', name: '', email: 'disabled@example.invalid', enabled: false },
+    ],
+  })
+  await page.goto('/')
+  await expect(page.locator('.account-row strong')).toHaveText([
+    '自定义名称',
+    'mailbox@example.invalid',
+    'stable-account-id',
+    'disabled@example.invalid',
+  ])
+  await expect(page.getByLabel('选择 disabled@example.invalid', { exact: true })).toBeDisabled()
+  await expect(
+    page.locator('.account-row').filter({ hasText: 'disabled@example.invalid' }),
+  ).toContainText('已停用')
+  await expect(page.getByLabel('选择 mailbox@example.invalid', { exact: true })).toBeEnabled()
+  await page.getByLabel('搜索账号').fill('  MAILBOX@EXAMPLE.INVALID  ')
+  await expect(page.locator('.account-row')).toHaveCount(1)
+  await page.getByRole('button', { name: '选择筛选结果', exact: true }).click()
+  await page.getByLabel('搜索账号').fill('stable-account-id')
+  await expect(page.locator('.account-row strong')).toHaveText(['stable-account-id'])
+  await page.getByLabel('搜索账号').fill('not-found')
+  await expect(page.getByText('未找到匹配账号', { exact: true })).toBeVisible()
+  await page.getByLabel('搜索账号').fill('named@example.invalid')
+  await expect(page.locator('.account-row strong')).toHaveText(['自定义名称'])
+  await page.getByLabel('搜索账号').fill('')
+  await page.getByRole('tab', { name: '糖果题', exact: true }).click()
+  await page.getByLabel('模型', { exact: true }).selectOption('gpt-test')
+  await page.getByRole('button', { name: /开始检测 ·/ }).click()
+  await expect(page.locator('.result-heading h2')).toHaveText('mailbox@example.invalid')
+  const submit = (await calls(page)).find((r: any) => r.path === 'api/batch-submit')
+  expect(submit.data.accountIds).toEqual(['email-only'])
+  expect(await page.evaluate(() => (window as any).__fixture.rows[0].accountName)).toBe('')
+  await page.reload()
+  await expect(page.locator('.result-heading h2')).toHaveText('mailbox@example.invalid')
+  await expect(page.getByLabel('选择 mailbox@example.invalid', { exact: true })).toBeChecked()
+  expect((await calls(page)).filter((r: any) => r.path === 'api/batch-submit')).toHaveLength(0)
+  await page.getByRole('button', { name: '记录', exact: true }).click()
+  await expect(page.getByLabel('筛选账号').locator('option')).toHaveText([
+    '全部账号',
+    '自定义名称',
+    'mailbox@example.invalid',
+    'stable-account-id',
+    'disabled@example.invalid',
+  ])
 })
 test('one batch groups accounts and repeats, candy shows actual wrong answer', async ({ page }) => {
   await mock(page)

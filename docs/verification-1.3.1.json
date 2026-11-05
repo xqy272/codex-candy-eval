@@ -1,0 +1,41 @@
+{
+  "observedAtUtc": "2026-11-05T02:08:48.897435+00:00",
+  "version": "1.3.1",
+  "baseCommit": "a82889d81357e324df6ec5bc93c096cfd20a6e10",
+  "archive": {
+    "sha256": "826554e0fcb4d8dfbfc29eb4882daaf8541dc78de29a0d28a763d779e9721f88",
+    "bytes": 6691534,
+    "binarySha256": "9688074ed6bdc25c8c1f280944057c18d4b151d0ed284835434105d015a31b0c",
+    "maximumGlibc": "GLIBC_2.28",
+    "allPrivateStateDeclarationsUnchanged": true,
+    "frontendMatchesArchive": true
+  },
+  "rustTestsPassed": 37,
+  "rustFmt": true,
+  "allTargetsClippyWarningsDenied": true,
+  "uiTestsPassed": 17,
+  "frontendProductionBuild": true,
+  "fixedSourcesVerified": 92,
+  "nativeHost": {
+    "version": "3.39.0",
+    "binarySha256": "64b7a6caa63aa5ab4ae4cfe2a4900c187a1e6825f745ca019594e51f67cd75db",
+    "source": "Official release, same previously checksum-verified host binary as 1.3.0 verification"
+  },
+  "nativeEvidence": [
+    "accounts-before-1.3.1.json",
+    "accounts-after-1.3.1.json",
+    "accounts-upgrade-1.3.1.json"
+  ],
+  "controlledModelCalls": 0,
+  "realModelRequests": 0,
+  "productionModified": false,
+  "published": false,
+  "temporaryResourcesRemoved": true,
+  "limits": [
+    "Blank-name metadata was constructed only in the disposable local database. The production account name values were not read; matching screenshots do not prove identical production cause.",
+    "Disabled state is preserved from host metadata; no production enable/disable state was verified or changed.",
+    "This patch was natively verified on CPR 3.39.0; compatibility range is unchanged and other host versions were not re-tested for this patch.",
+    "This display-only patch does not change fingerprint prompts, detector, model payloads, task execution or persistent state schemas."
+  ],
+  "cleanup": "credentials-cleanup-1.3.1.json"
+}

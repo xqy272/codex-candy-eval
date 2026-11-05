@@ -9,7 +9,7 @@ import {
   type ClientKey,
   type RecordEntry,
 } from './api'
-import { active, label } from './presentation'
+import { accountDisplayName, active, label } from './presentation'
 export function workspace() {
   const nav = ref<'test' | 'history'>('test'),
     kind = ref('fingerprint'),
@@ -145,13 +145,21 @@ export function workspace() {
           .filter((r) => r.accountId === focus.value)
           .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true })),
   )
-  const accountLabel = (id: string) =>
-    accounts.value.find((a) => a.account_id === id)?.name ||
-    records.value.find((r) => r.accountId === id)?.accountName ||
-    id
+  const accountLabel = (id: string) => {
+    const account = accounts.value.find((a) => a.account_id === id)
+    return account
+      ? accountDisplayName(account)
+      : records.value
+          .find((r) => r.accountId === id && r.accountName?.trim())
+          ?.accountName?.trim() || id
+  }
+  const recordLabel = (row: RecordEntry) => row.accountName?.trim() || accountLabel(row.accountId)
   const filteredAccounts = computed(() =>
     accounts.value.filter((a) =>
-      (a.name + ' ' + (a.email ?? '')).toLowerCase().includes(accountSearch.value.toLowerCase()),
+      [a.name, a.email ?? '', a.account_id]
+        .join(' ')
+        .toLowerCase()
+        .includes(accountSearch.value.trim().toLowerCase()),
     ),
   )
   const pageAccounts = computed(() =>
@@ -561,6 +569,7 @@ export function workspace() {
     completedAccounts,
     waitingAccounts,
     accountLabel,
+    recordLabel,
     pageAccounts,
     filteredAccounts,
     planned,

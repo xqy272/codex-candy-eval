@@ -1,4 +1,8 @@
-import type { RecordEntry } from './api'
+import type { Account, RecordEntry } from './api'
+
+export function accountDisplayName(account: Account): string {
+  return account.name.trim() || account.email?.trim() || account.account_id
+}
 export const kinds = [
   { label: '糖果题', value: 'candy' },
   { label: '模型指纹', value: 'fingerprint' },

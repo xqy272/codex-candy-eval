@@ -1,0 +1,63 @@
+{
+  "archiveSha256": "826554e0fcb4d8dfbfc29eb4882daaf8541dc78de29a0d28a763d779e9721f88",
+  "rows": [
+    {
+      "name": "fixture-account-1@example.invalid",
+      "nameHeight": 44.78125,
+      "enabled": false,
+      "id": "acct_01a1a96d923676b9aa32a5e4972b809c",
+      "status": "已停用"
+    },
+    {
+      "name": "fixture-account-2@example.invalid",
+      "nameHeight": 44.78125,
+      "enabled": false,
+      "id": "acct_01a1a96d9246737ba5dabdfec3f85d7a",
+      "status": "已停用"
+    },
+    {
+      "name": "fixture-account-3@example.invalid",
+      "nameHeight": 44.78125,
+      "enabled": false,
+      "id": "acct_01a1a96d926973528703a4f43a8bae9b",
+      "status": "已停用"
+    },
+    {
+      "name": "fixture-account-4@example.invalid",
+      "nameHeight": 44.78125,
+      "enabled": false,
+      "id": "acct_01a1a96d9285770e9e8781c23a413985",
+      "status": "已停用"
+    },
+    {
+      "name": "fixture-account-5@example.invalid",
+      "nameHeight": 44.78125,
+      "enabled": false,
+      "id": "acct_01a1a96d92a273b3b841aa77a2f53a2a",
+      "status": "已停用"
+    },
+    {
+      "name": "fixture-account-6@example.invalid",
+      "nameHeight": 44.78125,
+      "enabled": false,
+      "id": "acct_01a1a96d92be73ba8e90376faccbde60",
+      "status": "已停用"
+    },
+    {
+      "name": "acct_01a1a96d92cf7009bb8d3967724da894",
+      "nameHeight": 44.78125,
+      "enabled": true,
+      "id": "acct_01a1a96d92cf7009bb8d3967724da894",
+      "status": "可用"
+    }
+  ],
+  "checks": [
+    "Exact final 1.3.1 archive shows six email labels and one stable ID in the actual native iframe",
+    "Search locates an email-only account, an ID-only account, and reports an empty match",
+    "Enabled flags, disabled checkboxes and selected stable ID are unchanged; selection survives reload",
+    "Native dark theme and 390px account selector retain visible labels without horizontal overflow"
+  ],
+  "pageErrors": [],
+  "controlledModelCalls": 0,
+  "realModelRequests": 0
+}

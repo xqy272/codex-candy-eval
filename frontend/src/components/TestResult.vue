@@ -5,6 +5,7 @@ import { label, profiles, reasons, active } from '../presentation'
 import { artwork, download } from '../media'
 const props = defineProps<{
   records: RecordEntry[]
+  accountLabel: string
   clock: number
   readonly?: boolean
   busy?: boolean
@@ -101,7 +102,7 @@ function exportRecord() {
   <div v-if="current" class="test-result">
     <div class="result-heading">
       <div>
-        <h2>{{ current.accountName || current.accountId }}</h2>
+        <h2>{{ accountLabel }}</h2>
         <p class="muted">
           {{ current.model }} · {{ current.effort || '默认强度' }} ·
           {{ profiles[current.requestProfile ?? 'simple-v1'] ?? current.requestProfile

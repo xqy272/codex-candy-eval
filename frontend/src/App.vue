@@ -145,15 +145,16 @@ const kindName = (id: string) => kinds.find((k) => k.value === id)?.label ?? id
               type="checkbox"
               :value="a.account_id"
               :disabled="!a.enabled || w.busy"
-              :aria-label="`选择 ${a.name}`"
+              :aria-label="`选择 ${w.accountLabel(a.account_id)}`"
             /><button class="account-button" @click="w.focusAccount(a.account_id)">
-              <strong>{{ a.name }}</strong
+              <strong>{{ w.accountLabel(a.account_id) }}</strong
               ><small>{{ a.enabled ? w.accountStatus(a.account_id) : '已停用' }}</small>
             </button>
           </div>
           <p v-if="!w.accounts.length" class="empty muted">
             {{ w.loading ? '正在读取账号' : '暂无 OpenAI 账号' }}
           </p>
+          <p v-else-if="!w.filteredAccounts.length" class="empty muted">未找到匹配账号</p>
           <div v-if="w.filteredAccounts.length > 20" class="pagination">
             <button :disabled="w.accountPage === 0" @click="w.accountPage--">上一页</button
             ><span>{{ w.accountPage + 1 }}</span
@@ -207,13 +208,14 @@ const kindName = (id: string) => kinds.find((k) => k.value === id)?.label ?? id
             >
               <img v-if="artwork(r).url" :src="artwork(r).url" alt="已生成作品缩略图" /><span v-else
                 >作品已生成 · 查看代码</span
-              ><strong>{{ r.accountName || w.accountLabel(r.accountId) }}</strong>
+              ><strong>{{ w.recordLabel(r) }}</strong>
             </button>
           </div>
           <TestResult
             v-if="w.resultRecords.length"
             :key="w.resultRecords[0]!.id"
             :records="w.resultRecords"
+            :account-label="w.recordLabel(w.resultRecords[0]!)"
             :clock="w.clock"
             :busy="w.busy"
             @action="w.action"
@@ -265,7 +267,7 @@ const kindName = (id: string) => kinds.find((k) => k.value === id)?.label ?? id
           >账号<select v-model="w.filterAccount" aria-label="筛选账号">
             <option value="">全部账号</option>
             <option v-for="a in w.accounts" :key="a.account_id" :value="a.account_id">
-              {{ a.name }}
+              {{ w.accountLabel(a.account_id) }}
             </option>
           </select></label
         ><label
@@ -304,9 +306,7 @@ const kindName = (id: string) => kinds.find((k) => k.value === id)?.label ?? id
       </article>
       <article v-for="r in w.legacyItems" :key="r.id" class="history-row">
         <div>
-          <strong
-            >{{ kindName(r.kind) }} · {{ r.accountName || w.accountLabel(r.accountId) }}</strong
-          >
+          <strong>{{ kindName(r.kind) }} · {{ w.recordLabel(r) }}</strong>
           <p class="muted">
             {{ r.model }} · {{ new Date(r.startedAt).toLocaleString() }} ·
             {{ r.task ? '独立检测' : '旧版记录' }}
@@ -332,6 +332,7 @@ const kindName = (id: string) => kinds.find((k) => k.value === id)?.label ?? id
         v-if="w.resultRecords.length && (w.historyId || w.legacyId)"
         :key="'history-' + w.resultRecords[0]!.id"
         :records="w.resultRecords"
+        :account-label="w.recordLabel(w.resultRecords[0]!)"
         :clock="w.clock"
         :busy="w.busy"
         @action="w.action"
@@ -353,7 +354,7 @@ const kindName = (id: string) => kinds.find((k) => k.value === id)?.label ?? id
         <figure v-for="r in w.comparison" :key="r.id">
           <img :src="artwork(r).url" alt="对比中的鹈鹕作品" />
           <figcaption>
-            {{ r.accountName }} · {{ r.model }} · {{ r.effort || '默认强度' }} ·
+            {{ w.recordLabel(r) }} · {{ r.model }} · {{ r.effort || '默认强度' }} ·
             {{ profiles[r.requestProfile ?? 'simple-v1'] }} ·
             {{ new Date(r.startedAt).toLocaleString() }}
           </figcaption>

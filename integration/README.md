@@ -1,3 +1,22 @@
+# 1.3.1 账号名称回归
+
+仅使用下述 run_host.py 创建的全新临时 CPR 3.39.0。将原始 1.3.0 发布包和最终 1.3.1 包放在 dist，启动隔离宿主后依次执行：
+
+```bash
+python3 integration/accounts.py
+python3 integration/accounts-blank-fixture.py --postgres-bin /path/to/postgresql/16/bin \
+  --library-dir /path/to/tools/usr/lib/x86_64-linux-gnu
+node integration/accounts-browser.mjs before
+python3 integration/accounts-upgrade.py
+node integration/accounts-browser.mjs after
+```
+
+accounts.py 只创建七个本机假账号、停用其中六个并安装原始包，不创建 Key 或模型任务。accounts-blank-fixture.py 校验回环地址和 /tmp/cpr-eval-* 临时目录，再通过该临时 PostgreSQL 的本地 socket 构造空名称；它不用于生产或现有数据库。此夹具验证空名称的显示路径，不证明生产账号同样为空。
+
+before 验证原始包的空白标签及选择刷新恢复；upgrade 在原实例切换最终包，比较完整账号快照、草稿与已有集合，所有状态声明不变；after 验证邮箱/ID 标签、真实启停、搜索、刷新、深色主题和 390px 布局。两次浏览器检查均核对受控上游模型调用账本为零。证据保存在 .runtime/integration/accounts-*.json/png，安全副本见 docs 中对应的 1.3.1 文件。结束时按下述步骤停止宿主并清理临时数据。
+
+---
+
 # 1.3.0 隔离 CPR 验收
 
 仅在本机启动临时 PostgreSQL、Redis、官方 CPR 和受控 Responses 上游，不使用生产账号或真实模型。端口 18380、18381、15432、16379 运行前应空闲。退出时停止自建进程、删除临时数据库及控制凭据。
