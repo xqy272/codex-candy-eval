@@ -1,14 +1,25 @@
-"""1.4.1 final-archive preservation and native compatibility on loopback CPR only."""
+"""Final-archive preservation and native compatibility on loopback CPR only."""
 from native_client import Client, ROOT, WORK
-import datetime, hashlib, json, sys, tarfile, time, uuid
+import argparse, datetime, hashlib, json, tarfile, time, uuid
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('stage', choices=['idle', 'seed', 'upgrade', 'switch', 'business'])
+parser.add_argument('host_version', nargs='?', choices=['3.43.1', '3.44.0'])
+parser.add_argument('--version', choices=['1.4.1', '1.4.2'], default='1.4.1')
+args = parser.parse_args()
+if args.stage == 'business' and not args.host_version:
+    parser.error('business requires the running official CPR version')
+version = args.version
+baseline_version = {'1.4.1': '1.4.0', '1.4.2': '1.4.1'}[version]
+run = 'ui' + version.replace('.', '')
 
 c = Client()
 s = json.loads((WORK / 'state.json').read_text())
-stage = sys.argv[1]
-report = WORK / 'ui141-native.json'
+stage = args.stage
+report = WORK / f'{run}-native.json'
 proof = json.loads(report.read_text()) if stage != 'seed' and report.exists() else {'checks': [], 'realModelRequests': 0, 'hosts': []}
-archive = ROOT / 'dist/cloudops.codex-candy-eval-1.4.1-x86_64-unknown-linux-gnu.tar.gz'
-baseline = ROOT / 'dist/cloudops.codex-candy-eval-1.4.0-x86_64-unknown-linux-gnu.tar.gz'
+archive = ROOT / f'dist/cloudops.codex-candy-eval-{version}-x86_64-unknown-linux-gnu.tar.gz'
+baseline = ROOT / f'dist/cloudops.codex-candy-eval-{baseline_version}-x86_64-unknown-linux-gnu.tar.gz'
 ids = [next(a['account_id'] for a in s['accounts'] if a['name'].endswith(letter)) for letter in 'ABCDE']
 
 def persist_state():
@@ -65,7 +76,7 @@ if stage == 'idle':
     else:
         raise TimeoutError('Controlled tasks did not become quiescent')
 elif stage == 'seed':
-    paused_id = 'ui141-paused-' + uuid.uuid4().hex
+    paused_id = f'{run}-paused-' + uuid.uuid4().hex
     route('api/submit', {'id': paused_id, 'accountId': ids[0], 'clientKeyId': s['clientKeyId'],
           'model': 'eval-incomplete', 'effort': '', 'kind': 'fingerprint', 'profile': 'simple-v1', 'step': 0})
     assert wait(paused_id)['status'] == 'paused'
@@ -80,14 +91,14 @@ elif stage == 'seed':
     before = snapshot()
     before['sample'] = route('api/sample', {'id': paused_id, 'key': wait(paused_id)['attempts'][0]['key']})
     before['detail'] = route('api/detail', {'id': s['baselineRecordId']})
-    (WORK / 'ui141-before.json').write_text(json.dumps(before))
-    checkpoint('Released 1.4.0 on official CPR 3.43.1 seeded with history, repeated batch, draft and unknown-consumption sample')
+    (WORK / f'{run}-before.json').write_text(json.dumps(before))
+    checkpoint(f'Released {baseline_version} on official CPR 3.43.1 seeded with history, repeated batch, draft and unknown-consumption sample')
 elif stage == 'upgrade':
     assert manifest(archive)['state'] == manifest(baseline)['state']
     _, digest = c.install(archive)
     instance = next(i for i in c.api('/api/admin/plugins/instances') if i['id'] == s['instanceId'])
     c.api('/api/admin/plugins/instances/switch-version', {'id': instance['id'], 'target': {'artifactSha256': digest, 'expectedRevision': instance['revision']}})
-    before = json.loads((WORK / 'ui141-before.json').read_text())
+    before = json.loads((WORK / f'{run}-before.json').read_text())
     assert snapshot() == {key: value for key, value in before.items() if key.startswith('api/')}
     assert route('api/sample', {'id': s['pausedId'], 'key': wait(s['pausedId'])['attempts'][0]['key']}) == before['sample']
     assert route('api/detail', {'id': s['baselineRecordId']}) == before['detail']
@@ -95,9 +106,9 @@ elif stage == 'upgrade':
     persist_state()
     proof['archiveSha256'] = digest
     no_replay()
-    checkpoint('Same-instance 1.4.0 -> 1.4.1 preserves every state declaration, collection, private draft and stored answer on CPR 3.43.1')
+    checkpoint(f'Same-instance {baseline_version} -> {version} preserves every state declaration, collection, private draft and stored answer on CPR 3.43.1')
 elif stage == 'switch':
-    (WORK / 'ui141-host-before.json').write_text(json.dumps(snapshot()))
+    (WORK / f'{run}-host-before.json').write_text(json.dumps(snapshot()))
     (WORK / 'switch-complete').unlink(missing_ok=True)
     (WORK / 'switch-host').write_text('0')
     deadline = time.monotonic() + 120
@@ -105,20 +116,21 @@ elif stage == 'switch':
         if time.monotonic() >= deadline:
             raise TimeoutError('Official 3.44.0 host switch did not finish')
         time.sleep(.25)
-    assert snapshot() == json.loads((WORK / 'ui141-host-before.json').read_text())
+    assert snapshot() == json.loads((WORK / f'{run}-host-before.json').read_text())
     no_replay()
     checkpoint('Official CPR 3.43.1 -> 3.44.0 preserves final plugin instance, state and unknown-consumption pause without replay')
 elif stage == 'business':
-    host_version = sys.argv[2]
+    host_version = args.host_version
     binary = ROOT / '.runtime/hosts' / host_version / 'codex-proxy-rs/codex-proxy-rs'
     for kind, model in [('candy', 'eval-markdown'), ('fingerprint', 'eval-fp'), ('pelican', 'eval-pelican')]:
         batch = submit(kind, model)
         rows = [wait(task_id) for task_id in batch['taskIds']]
-        assert all(row['pluginVersion'] == '1.4.1' and row['validSamples'] == (3 if kind == 'fingerprint' else 1) for row in rows)
+        assert all(row['pluginVersion'] == version and row['validSamples'] == (3 if kind == 'fingerprint' else 1) for row in rows)
         if kind == 'fingerprint':
             assert all(row['attribution']['results'] for row in rows)
-        if kind == 'pelican':
-            s['drawingBatchId'] = batch['request']['id']
+        if version == '1.4.2' or kind == 'pelican':
+            state_key = {'candy': 'candyBatchId', 'fingerprint': 'fingerprintBatchId', 'pelican': 'drawingBatchId'}[kind]
+            s[state_key] = batch['request']['id']
             persist_state()
         checkpoint('Final archive completes two-account ' + kind + ' on official CPR ' + host_version)
     no_replay()

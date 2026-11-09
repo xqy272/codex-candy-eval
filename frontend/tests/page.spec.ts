@@ -145,8 +145,8 @@ async function mock(
                       validSamples: count,
                       expectedSamples: d.kind === 'fingerprint' ? 3 : 1,
                       canResume: paused,
-                      startedAt: Date.now() - 5000,
-                      updatedAt: 1,
+                      startedAt: batch.startedAt + 1000 + i,
+                      updatedAt: batch.startedAt + 7000 + i * 1000 + n,
                       durationMs: 100,
                       attempts,
                       samples: [],
@@ -205,7 +205,7 @@ async function mock(
                   instructions: '',
                   durationMs: 100,
                   requestId: 'fixture-only',
-                  answer: { text, completed: true, usage: { inputTokens: 12 } },
+                  answer: { text, completed: true, usage: { input_tokens: 12, output_tokens: 24, reasoning_tokens: 10, total_tokens: 36 } },
                 },
               })
             }
@@ -372,8 +372,9 @@ test('single candy displays the actual wrong answer with error semantics', async
   await mock(page)
   await prepare(page, '糖果题')
   await start(page)
-  await expect(page.locator('.big-answer')).toHaveText('0 / 1')
   await expect(page.getByLabel('实际回答', { exact: true })).toContainText('22')
+  await expect(page.getByLabel('实际回答', { exact: true })).toContainText('标准答案 21')
+  await expect(page.locator('.big-answer')).toHaveCount(0)
   await expect(page.locator('.result-state')).toContainText('答错')
   expect(await page.locator('.result-state').evaluate(e => getComputedStyle(e).color)).not.toBe('')
 })
@@ -438,7 +439,7 @@ test('history details return to the filtered list without replacing test drafts'
   await navigate(page, '测试')
   await expect(page.getByRole('combobox', { name: '模型', exact: true })).toContainText('other-model')
   await openAccount(page)
-  await expect(page.locator('.result-heading')).toContainText('gpt-test')
+  await expect(page.getByLabel('请求概况', { exact: true })).toContainText('gpt-test')
 })
 
 test('execution and result filters match batches independently', async ({ page }) => {
@@ -788,7 +789,87 @@ test('dialog footer stays in the visible host viewport when the iframe is taller
     expect(box!.y + box!.height).toBeLessThanOrEqual(height)
     expect(footer!.y + footer!.height).toBeLessThanOrEqual(height)
     await expect(result.getByRole('button', { name: '关闭结果', exact: true })).toBeInViewport()
+    const scrim = await result.evaluate(e => {
+      const bounds = e.previousElementSibling!.getBoundingClientRect()
+      return { height: bounds.height, viewport: innerHeight, coversBottom: document.elementFromPoint(5, innerHeight - 2) === e.previousElementSibling }
+    })
+    expect(scrim.height).toBe(scrim.viewport)
+    expect(scrim.coversBottom).toBe(true)
   }
   await closeResult(page)
+  expect(await submissions(page)).toHaveLength(1)
+})
+
+test('test batch shows its last saved completion, account time stays bold and history keeps its submission time', async ({ page }) => {
+  await mock(page)
+  await prepare(page, '糖果题', true)
+  await start(page)
+  const time = page.locator('.current-batch time')
+  const timestamps = await page.evaluate(() => {
+    const state = (window as any).__fixture
+    const batch = state.batches[0]
+    const finish = Math.max(...state.rows.map((row: any) => row.updatedAt))
+    return { start: new Date(batch.startedAt).toLocaleString(), finish: new Date(finish).toISOString(), account: new Date(state.rows[0].startedAt).toISOString() }
+  })
+  await expect(time).toHaveCount(1)
+  await expect(time).toHaveAttribute('datetime', timestamps.finish)
+  await expect(page.locator('.current-batch')).toContainText('完成于')
+  const timestampStyle = (node: Element) => { const style = getComputedStyle(node); return { weight: Number(style.fontWeight), class: node.className } }
+  const batchStyle = await time.evaluate(timestampStyle)
+  await openAccount(page)
+  const result = page.getByRole('dialog', { name: '检测结果' })
+  const detected = result.locator('.detection-time time')
+  await expect(detected).toHaveAttribute('datetime', timestamps.account)
+  expect(await detected.evaluate(timestampStyle)).toEqual(batchStyle)
+  expect(batchStyle.weight).toBeGreaterThanOrEqual(600)
+  await expect(result.getByLabel('请求概况')).toContainText('36 Token')
+  await expect(result.getByLabel('请求概况')).toContainText('推理 10')
+  await expect(result.getByLabel('请求详情')).toContainText('fixture-only')
+  await closeResult(page)
+  await navigate(page, '记录')
+  await expect(page.locator('.history-table')).toContainText(timestamps.start)
+  expect(await submissions(page)).toHaveLength(1)
+})
+
+test('incomplete and missing batches never label a submission or surviving sample as completion', async ({ page }) => {
+  await mock(page, { queued: true })
+  await prepare(page, '糖果题', true)
+  await start(page)
+  await expect(page.locator('.current-batch')).toContainText('发起于')
+  await page.evaluate(() => {
+    const state = (window as any).__fixture
+    state.rows.forEach((row: any) => { row.status = 'completed'; delete row.progress; delete row.updatedAt })
+  })
+  await expect(page.locator('.current-batch')).toContainText('完成时间 未记录')
+  await expect(page.locator('.current-batch time')).toHaveCount(0)
+  await page.evaluate(() => { (window as any).__fixture.rows.pop() })
+  await expect(page.locator('.current-batch')).toContainText('部分记录已淘汰')
+  await expect(page.locator('.current-batch')).not.toContainText('完成于')
+})
+
+test('history opens a named account directly, switches in place, and backs out one level', async ({ page }) => {
+  await mock(page)
+  await prepare(page, '糖果题', true)
+  await start(page)
+  await navigate(page, '记录')
+  const shortcut = page.locator('.history-table').getByRole('button', { name: '查看 测试账号 B 结果', exact: true })
+  await shortcut.click()
+  const detail = page.getByRole('dialog', { name: '检测结果', exact: true })
+  await expect(detail.getByRole('heading', { name: '测试账号 B' })).toBeVisible()
+  await choose(page, '切换批次账号', '测试账号 A')
+  await expect(detail.getByRole('heading', { name: '测试账号 A' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  const batch = page.getByRole('dialog', { name: '批次结果', exact: true })
+  await expect(batch.getByRole('button', { name: '查看 测试账号 A 结果', exact: true })).toBeFocused()
+  await expect(batch.getByLabel('请求概况')).toHaveCount(0)
+  await expect(batch.locator('time')).toHaveCount(0)
+  await batch.getByRole('button', { name: '查看 测试账号 B 结果', exact: true }).click()
+  await detail.getByRole('button', { name: '返回批次' }).click()
+  await expect(batch).toBeVisible()
+  await batch.getByRole('button', { name: '关闭批次' }).click()
+  await expect(shortcut).toBeFocused()
+  await choose(page, '筛选账号', '测试账号 B')
+  await page.locator('.history-table').getByRole('button', { name: '查看结果', exact: true }).click()
+  await expect(detail.getByRole('heading', { name: '测试账号 B' })).toBeVisible()
   expect(await submissions(page)).toHaveLength(1)
 })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { ZButton, ZConfigProvider, ZDialog, ZPageHeader, ZPopover, ZSegmented } from '@codex-proxy/ui'
+import { ZButton, ZConfigProvider, ZPageHeader, ZPopover, ZSegmented, ZSelect } from '@codex-proxy/ui'
 import { zhHans } from '@codex-proxy/ui/locale'
 import { workspace } from './workspace'
 import { isPreview } from './api'
@@ -11,6 +11,7 @@ import ResultWorkspace from './components/ResultWorkspace.vue'
 import HistoryList, { type HistoryRow } from './components/HistoryList.vue'
 import ArtworkComparison from './components/ArtworkComparison.vue'
 import WorkspaceFeedback from './components/WorkspaceFeedback.vue'
+import HostDialog from './components/HostDialog.vue'
 const w = reactive(workspace())
 const navOptions = [{ label: '测试', value: 'test' }, { label: '记录', value: 'history' }]
 const typeOptions = kinds
@@ -18,25 +19,43 @@ const currentNav = computed({ get: () => w.nav, set: (value: string) => {
   w.nav = value === 'history' ? 'history' : 'test'
 }})
 const currentKind = computed({ get: () => w.kind, set: (value: string) => w.chooseKind(value) })
-let returnHistory = ''
+let returnHistory = '', returnTest = ''
+const resultOpen = ref(false)
+const dialogTitle = computed(() => w.detailOpen ? '检测结果' : '批次结果')
+const historyAccountDetail = computed(() => w.nav === 'history' && w.detailOpen && w.batchAccounts.length > 1)
+const dialogAccounts = computed(() => w.currentBatch ? w.batchAccounts.map((id) => ({ value: id, label: w.batchAccountLabel(w.currentBatch!, id) })) : [])
 async function restoreFocus(attribute: string, value: string) {
   await nextTick()
   const element = [...document.querySelectorAll<HTMLElement>('[' + attribute + ']')].find((el) => el.getAttribute(attribute) === value && el.getClientRects().length)
-  element?.focus({ preventScroll: true })
-  element?.scrollIntoView({ block: 'nearest' })
+  const control = element?.matches('button, [role="combobox"]') ? element : element?.querySelector<HTMLElement>('[role="combobox"]')
+  control?.focus({ preventScroll: true })
+  control?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 }
-function openAccount(id: string) { w.focusAccount(id); resultOpen.value = true }
-function backToBatch() { w.detailOpen = false; void restoreFocus('data-return-account', w.focus) }
-function openHistory(row: HistoryRow) {
-  returnHistory = row.id
-  if (row.batch) w.openBatch(row.batch)
+function openAccount(id: string) {
+  if (w.nav === 'test' && !resultOpen.value) returnTest = id
+  w.focusAccount(id)
+  resultOpen.value = true
+}
+function backToBatch(id = w.focus) { w.detailOpen = false; void restoreFocus('data-return-account', id) }
+function openHistory(row: HistoryRow, account?: string, origin = row.id) {
+  returnHistory = origin
+  if (row.batch) w.openBatch(row.batch, account)
   else if (row.record) w.openLegacy(row.record)
   resultOpen.value = true
 }
 function backToHistory() { w.closeHistory(); void restoreFocus('data-return-history', returnHistory) }
-const resultOpen = ref(false)
 watch(() => w.nav === 'history' ? w.historyDetail : w.detailOpen, (open) => { resultOpen.value = open })
-function resultClosed() { if (!resultOpen.value) w.nav === 'history' ? backToHistory() : backToBatch() }
+function resultClosed() {
+  if (resultOpen.value) return
+  if (w.nav === 'history') backToHistory()
+  else { backToBatch(returnTest || w.focus); returnTest = '' }
+}
+function canCloseResult() {
+  if (!historyAccountDetail.value) return true
+  backToBatch()
+  return false
+}
+function dismissResult() { if (canCloseResult()) resultOpen.value = false }
 </script>
 <template>
   <ZConfigProvider :locale="zhHans">
@@ -59,17 +78,25 @@ function resultClosed() { if (!resultOpen.value) w.nav === 'history' ? backToHis
         <RequestPanel :w="w" />
         <div class="workspace">
           <AccountPicker :w="w" />
-          <ResultWorkspace :w="w" @open="openAccount" @back="backToBatch" />
+          <ResultWorkspace :w="w" @open="openAccount" />
         </div>
       </section>
       <section v-else class="history-workspace">
         <HistoryList :w="w" @open="openHistory" />
       </section>
-      <ZDialog v-model="resultOpen" :title="w.nav === 'history' && !w.showDetail ? '批次结果' : '检测结果'" width="72rem" :draggable="false" @closed="resultClosed">
+      <HostDialog v-model="resultOpen" :title="dialogTitle" width="72rem" :draggable="false" :before-close="canCloseResult" @closed="resultClosed">
+        <template #header="{ titleId }">
+          <div class="result-dialog-heading">
+            <h2 :id="titleId">{{ dialogTitle }}</h2>
+            <ZSelect v-if="w.detailOpen && dialogAccounts.length > 1" class="report-account-select" aria-label="切换批次账号"
+              size="small" :model-value="w.focus" :options="dialogAccounts" :filterable="dialogAccounts.length > 4"
+              @update:model-value="(id) => { if (id && id !== w.focus) openAccount(id) }" />
+          </div>
+        </template>
         <WorkspaceFeedback :w="w" />
-        <ResultWorkspace :w="w" dialog @open="openAccount" @back="backToBatch" />
-        <template #footer><ZButton @click="resultOpen = false">关闭结果</ZButton></template>
-      </ZDialog>
+        <ResultWorkspace :w="w" dialog @open="openAccount" />
+        <template #footer><ZButton @click="dismissResult">{{ historyAccountDetail ? '返回批次' : w.detailOpen ? '关闭结果' : '关闭批次' }}</ZButton></template>
+      </HostDialog>
       <ArtworkComparison :w="w" />
     </main>
   </ZConfigProvider>

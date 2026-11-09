@@ -1,0 +1,18 @@
+{
+  "controlledRequestsFinalEnvironment": 28,
+  "modelCounts": {
+    "eval-candy": 7,
+    "eval-incomplete": 1,
+    "eval-markdown": 4,
+    "eval-fp": 12,
+    "eval-pelican": 4
+  },
+  "activeAtEnd": 0,
+  "globalPeak": 1,
+  "maximumPerAccountPeak": 1,
+  "acceptedBrowserCalls": {
+    "3.43.1": 0,
+    "3.44.0": 0
+  },
+  "realModelRequests": 0
+}

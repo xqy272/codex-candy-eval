@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ZButton, ZDialog, ZSegmented, ZSelect } from '@codex-proxy/ui'
+import { ZButton, ZSegmented, ZSelect } from '@codex-proxy/ui'
+import HostDialog from './HostDialog.vue'
 import type { RecordEntry } from '../api'
 import { artwork, download } from '../media'
 const props = defineProps<{ record: RecordEntry }>()
@@ -27,7 +28,7 @@ watch(() => media.value.url, () => { failed.value = false })
       <ZButton v-if="failed" size="small" @click="failed = false">重新预览 · 不发请求</ZButton>
     </div>
     <ZButton v-if="media.url" size="small" variant="text" @click="emit('compare', record)">加入作品对比</ZButton>
-    <ZDialog v-model="zoom" title="作品预览" width="64rem">
+    <HostDialog v-model="zoom" title="作品预览" width="64rem" :draggable="false">
       <div class="zoom-controls">
         <ZSelect v-model="scale" aria-label="预览缩放" :options="[0.75, 1, 1.5, 2].map((value) => ({ label: (value * 100) + '%', value }))" />
         <ZSelect v-model="background" aria-label="预览背景" :options="[{ label: '跟随主题', value: 'theme' }, { label: '棋盘格', value: 'checker' }]" />
@@ -35,6 +36,6 @@ watch(() => media.value.url, () => { failed.value = false })
       <div class="zoom-canvas" :class="{ checker: background === 'checker' }">
         <img :src="media.url" alt="放大中的鹈鹕作品" :style="{ width: (scale * 100) + '%', maxWidth: 'none' }" />
       </div>
-    </ZDialog>
+    </HostDialog>
   </section>
 </template>

@@ -4,14 +4,16 @@ import { ZButton, ZCard, ZEmpty, ZFormItem, ZInput, ZSelect, ZTable, ZTag, type 
 import type { Batch, RecordEntry } from '../api'
 import type { Workspace } from '../workspace'
 import { executionOptions, kinds, label, profiles, recordTone, verdictOptions } from '../presentation'
+import HistoryAccountLinks from './HistoryAccountLinks.vue'
 const props = defineProps<{ w: Workspace }>()
-const emit = defineEmits<{ open: [row: HistoryRow] }>()
+const emit = defineEmits<{ open: [row: HistoryRow, account?: string, origin?: string] }>()
 export interface HistoryRow {
   id: string
   title: string
   conditions: string
   status: string
   startedAt: number
+  accounts: { label: string; value: string }[]
   batch?: Batch
   record?: RecordEntry
 }
@@ -22,12 +24,13 @@ const rows = computed<HistoryRow[]>(() => [
     title: (kinds.find((k) => k.value === b.request.kind)?.label ?? b.request.kind) + ' · ' + b.request.accountIds.length + ' 个账号',
     conditions: [b.request.model, b.request.effort || '默认强度', profiles[b.request.profile]].join(' · '),
     status: props.w.batchStatus(b), startedAt: b.startedAt, batch: b,
+    accounts: b.request.accountIds.map((id) => ({ label: props.w.batchAccountLabel(b, id), value: id })),
   })),
   ...props.w.legacyItems.map((r) => ({
     id: r.id,
     title: (kinds.find((k) => k.value === r.kind)?.label ?? r.kind) + ' · ' + props.w.recordLabel(r),
     conditions: r.model + ' · ' + (r.task ? '独立检测' : '旧版记录'),
-    status: label(r), startedAt: r.startedAt, record: r,
+    status: label(r), startedAt: r.startedAt, record: r, accounts: [],
   })),
 ].sort((a, b) => b.startedAt - a.startedAt))
 const paged = computed(() => rows.value.slice(page.value * 10, page.value * 10 + 10))
@@ -44,6 +47,11 @@ function batchTone(row: HistoryRow) {
   if (row.record) return recordTone(row.record)
   return row.status === '检测中' ? 'info' : ['部分完成', '待确认提交'].includes(row.status) ? 'warning' : 'default'
 }
+function preferredAccount(row: HistoryRow) {
+  const id = props.w.filterAccount
+  return row.accounts.some(account => account.value === id) ? id : undefined
+}
+const actionLabel = (row: HistoryRow) => row.accounts.length > 1 && !preferredAccount(row) ? '批次总览' : '查看结果'
 </script>
 <template>
   <section aria-label="检测记录">
@@ -58,15 +66,16 @@ function batchTone(row: HistoryRow) {
       </div>
     </ZCard>
     <ZTable v-if="rows.length" class="history-table desktop-results" :columns="columns" :data="paged" row-key="id">
-      <template #title="{ row }"><strong>{{ row.title }}</strong></template>
+      <template #title="{ row }"><strong>{{ row.title }}</strong><HistoryAccountLinks v-if="!w.filterAccount" :batch-id="row.id" :accounts="row.accounts" @open="(id, origin) => emit('open', row, id, origin)" /></template>
       <template #status="{ row }"><ZTag size="small" :type="batchTone(row)">{{ row.status }}</ZTag></template>
-      <template #actions="{ row }"><ZButton :data-return-history="row.id" size="small" @click="emit('open', row)">查看结果</ZButton></template>
+      <template #actions="{ row }"><ZButton :data-return-history="row.id" size="small" @click="emit('open', row, preferredAccount(row))">{{ actionLabel(row) }}</ZButton></template>
     </ZTable>
     <div v-if="rows.length" class="mobile-results">
       <ZCard v-for="row in paged" :key="row.id" padding="compact" class="history-row">
         <div class="aside-heading"><strong>{{ row.title }}</strong><ZTag size="small" :type="batchTone(row)">{{ row.status }}</ZTag></div>
         <p class="muted">{{ row.conditions }}</p><p class="muted">{{ new Date(row.startedAt).toLocaleString() }}</p>
-        <ZButton :data-return-history="row.id" size="small" @click="emit('open', row)">查看结果</ZButton>
+        <HistoryAccountLinks v-if="!w.filterAccount" :batch-id="row.id" :accounts="row.accounts" @open="(id, origin) => emit('open', row, id, origin)" />
+        <ZButton :data-return-history="row.id" size="small" @click="emit('open', row, preferredAccount(row))">{{ actionLabel(row) }}</ZButton>
       </ZCard>
     </div>
     <ZEmpty v-if="!rows.length" description="暂无符合筛选条件的记录" />

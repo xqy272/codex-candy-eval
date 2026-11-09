@@ -84,6 +84,7 @@ export interface Sample {
 }
 export interface RecordEntry {
   batchId?: string | null
+  clientKeyId?: string | null
   outputVersion?: string | null
   progress?: Progress
   task?: boolean

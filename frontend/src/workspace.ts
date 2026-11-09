@@ -161,6 +161,10 @@ export function workspace() {
           ?.accountName?.trim() || id
   }
   const recordLabel = (row: RecordEntry) => row.accountName?.trim() || accountLabel(row.accountId)
+  const batchAccountLabel = (batch: Batch, id: string) => {
+    const saved = records.value.find(row => row.batchId === batch.request.id && row.accountId === id && row.accountName?.trim())
+    return saved ? recordLabel(saved) : accountLabel(id)
+  }
   const filteredAccounts = computed(() =>
     accounts.value.filter((a) =>
       [a.name, a.email ?? '', a.account_id]
@@ -192,9 +196,6 @@ export function workspace() {
   const ready = computed(() => !readinessReason.value)
   const running = computed(() => batchRows.value.some(active))
   const globalRunning = computed(() => records.value.some(active))
-  const showDetail = computed(
-    () => !!legacyId.value && nav.value === 'history' || batchAccounts.value.length === 1 || detailOpen.value,
-  )
   const historyDetail = computed(() => !!historyId.value || !!legacyId.value)
   const batchState = (b: Batch) => {
     const rows = records.value.filter((r) => r.batchId === b.request.id)
@@ -472,13 +473,15 @@ export function workspace() {
       busy.value = false
     }
   }
-  function openBatch(b: Batch) {
+  function openBatch(b: Batch, account?: string) {
     historyListScroll = scrollY
     historyId.value = b.request.id
     legacyId.value = ''
-    focus.value = b.request.accountIds[0] ?? ''
-    detailOpen.value = b.request.accountIds.length === 1
+    const singleAccount = b.request.accountIds.length === 1 ? b.request.accountIds[0] : undefined
+    focus.value = account && b.request.accountIds.includes(account) ? account : singleAccount ?? ''
+    detailOpen.value = !!focus.value
     resultRecords.value = []
+    gallery.value = []
     void loadResult()
   }
   function openLegacy(r: RecordEntry) {
@@ -615,7 +618,6 @@ export function workspace() {
     syncError,
     lastSyncedAt,
     globalRunning,
-    showDetail,
     historyDetail,
     detailOpen,
     closeHistory,
@@ -628,6 +630,7 @@ export function workspace() {
     completedAccounts,
     waitingAccounts,
     accountLabel,
+    batchAccountLabel,
     recordLabel,
     pageAccounts,
     filteredAccounts,

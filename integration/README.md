@@ -1,3 +1,22 @@
+# 1.4.2 批次时间、检测报告与真实滚动验收
+
+按 1.4.1 小节启动同样的全新临时宿主；准备已发布的 1.4.1 和最终 1.4.2 安装包。逐条运行，业务、浏览器和宿主切换不并行：
+
+```bash
+python3 integration/native_client.py --baseline dist/cloudops.codex-candy-eval-1.4.1-x86_64-unknown-linux-gnu.tar.gz
+python3 integration/ui-fixes-native.py --version 1.4.2 seed
+python3 integration/ui-fixes-native.py --version 1.4.2 upgrade
+python3 integration/ui-fixes-native.py --version 1.4.2 business 3.43.1
+node integration/result-report-browser.mjs 3.43.1
+python3 integration/ui-fixes-native.py --version 1.4.2 switch
+python3 integration/ui-fixes-native.py --version 1.4.2 business 3.44.0
+node integration/result-report-browser.mjs 3.44.0
+```
+
+验收使用同实例的旧批次与新受控批次。浏览器读取确切批次/任务核对日期及字重，验证真实宿主滚动与缩放时遮罩覆盖和页脚点击，检查历史直达、账号切换、两步返回、Markdown/原文、请求用量及两种窄屏。UI 验收仅查看已有结果，账本不得新增请求。受控报告和截图写入 `.runtime/integration/ui142-*`。按下节流程清理，只保留脱敏证据。
+
+---
+
 # 1.4.1 原生 UI 修复与 CPR 3.44.0 验收
 
 仅使用临时本机 CPR、数据库和受控上游。准备已发布 1.4.0 与最终 1.4.1 归档、核验过的官方 3.43.1/3.44.0 发行目录；run_host.py 以 3.43.1 启动，并用 --matrix-cpr-dir 注册 3.44.0 为唯一目标。沿用下方数据库工具参数，不连接生产或真实模型。

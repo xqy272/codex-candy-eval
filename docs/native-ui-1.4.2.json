@@ -1,0 +1,58 @@
+{
+  "runs": [
+    {
+      "hostVersion": "3.43.1",
+      "archiveSha256": "2efeb1ce4d2732535504809602de89636f1f6684238e7054cbb2fc5003f767d6",
+      "checks": [
+        "Controlled tasks are quiescent before read-only UI verification",
+        "Native CPR accepts the warm theme used for screenshots",
+        "Test batch shows exactly one timestamp from the last saved completion",
+        "Account detection time keeps its original value and uses the same full bold date and time as the batch",
+        "Real host scroll clips the top of the iframe while the result is open",
+        "The native backdrop spans and blocks clicks across the full iframe height",
+        "Dialog tracks host scrolling in both directions and keeps the footer clickable",
+        "Dialog keeps the footer inside the native viewport after resizing",
+        "Named history shortcut opens the correct account directly with a side-by-side request and token summary",
+        "Rendered answer preserves math and Markdown; request body is visible and full diagnostics are folded",
+        "Source mode still exposes the original answer verbatim",
+        "Escape returns to a simple batch overview with no duplicate report details",
+        "Explicit back and close preserve the history filter and focus on the original shortcut",
+        "Fingerprint report retains three sample statuses and the ranking",
+        "Escape closes a nested artwork preview and leaves the account report open",
+        "Report and its close button fit the 390px native host",
+        "Report and its close button fit the 320px native host",
+        "Navigation and report viewing cause no model calls or page errors"
+      ],
+      "controlledUiCalls": 0,
+      "realModelRequests": 0,
+      "javascriptErrors": []
+    },
+    {
+      "hostVersion": "3.44.0",
+      "archiveSha256": "2efeb1ce4d2732535504809602de89636f1f6684238e7054cbb2fc5003f767d6",
+      "checks": [
+        "Controlled tasks are quiescent before read-only UI verification",
+        "Native CPR accepts the warm theme used for screenshots",
+        "Test batch shows exactly one timestamp from the last saved completion",
+        "Account detection time keeps its original value and uses the same full bold date and time as the batch",
+        "Real host scroll clips the top of the iframe while the result is open",
+        "The native backdrop spans and blocks clicks across the full iframe height",
+        "Dialog tracks host scrolling in both directions and keeps the footer clickable",
+        "Dialog keeps the footer inside the native viewport after resizing",
+        "Named history shortcut opens the correct account directly with a side-by-side request and token summary",
+        "Rendered answer preserves math and Markdown; request body is visible and full diagnostics are folded",
+        "Source mode still exposes the original answer verbatim",
+        "Escape returns to a simple batch overview with no duplicate report details",
+        "Explicit back and close preserve the history filter and focus on the original shortcut",
+        "Fingerprint report retains three sample statuses and the ranking",
+        "Escape closes a nested artwork preview and leaves the account report open",
+        "Report and its close button fit the 390px native host",
+        "Report and its close button fit the 320px native host",
+        "Navigation and report viewing cause no model calls or page errors"
+      ],
+      "controlledUiCalls": 0,
+      "realModelRequests": 0,
+      "javascriptErrors": []
+    }
+  ]
+}

@@ -1,7 +1,20 @@
-import type { Account, RecordEntry } from './api'
+import type { Account, Batch, RecordEntry } from './api'
 
 export function accountDisplayName(account: Account): string {
   return account.name.trim() || account.email?.trim() || account.account_id
+}
+
+export function batchCompletionTime(batch: Batch, records: RecordEntry[]): number | undefined {
+  if (!batch.ready || batch.stopped || !batch.taskIds.length) return
+  const rows = new Map(records.map(row => [row.id, row]))
+  let latest = 0
+  for (const id of batch.taskIds) {
+    const row = rows.get(id)
+    const time = row?.updatedAt
+    if (row?.status !== 'completed' || !time || !Number.isFinite(time) || time < batch.startedAt) return
+    latest = Math.max(latest, time)
+  }
+  return latest
 }
 export const kinds = [
   { label: '糖果题', value: 'candy' },

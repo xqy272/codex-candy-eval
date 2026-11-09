@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ZButton, ZCard, ZDialog, ZTag } from '@codex-proxy/ui'
+import { ZButton, ZCard, ZTag } from '@codex-proxy/ui'
+import HostDialog from './HostDialog.vue'
 import type { Workspace } from '../workspace'
 import { artwork } from '../media'
 import { profiles } from '../presentation'
@@ -24,12 +25,12 @@ const differing = computed(() => props.w.comparison.length === 2 && ['model', 'e
       </ZCard>
     </div>
   </section>
-  <ZDialog v-model="replacing" title="替换哪一份作品" description="对比最多保留两份，选择替换位置" width="32rem">
+  <HostDialog v-model="replacing" title="替换哪一份作品" description="对比最多保留两份，选择替换位置" width="32rem" :draggable="false">
     <p v-if="w.comparisonCandidate">加入 {{ w.recordLabel(w.comparisonCandidate) }} · {{ w.comparisonCandidate.model }}</p>
     <template #footer>
       <ZButton @click="replacing = false">取消</ZButton>
       <ZButton @click="w.replaceComparison(0)">替换 A</ZButton>
       <ZButton @click="w.replaceComparison(1)">替换 B</ZButton>
     </template>
-  </ZDialog>
+  </HostDialog>
 </template>
