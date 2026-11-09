@@ -4,6 +4,8 @@ CPR 原生模型测试插件，版本 **1.4.3**。使用 CPR 官方 UI 组件，
 
 ## 安装与升级
 
+待发布修复：批次「执行情况」列的表头与状态标签统一左对齐，随下一轮优化提供安装包；已发布包仍为 1.4.3。
+
 本版构建文件为 `dist/cloudops.codex-candy-eval-1.4.3-x86_64-unknown-linux-gnu.tar.gz` 及同名 `.sha256`。从 [v1.4.3 Release](https://github.com/xqy272/codex-candy-eval/releases/tag/v1.4.3) 下载后，上传至 CPR 插件管理并核对摘要，打开“模型测试”。
 
 要求 Linux x86_64、glibc 2.28+。宿主声明为 `>=3.43.1, <3.45.0`，组件对齐 CPR 3.44.0 的 UI 0.9.1；实际验收版本见 [验收记录](docs/verification.md)。遮罩覆盖插件页面，弹窗面板随宿主可见区域调整。旧宿主保留使用此前适配版本。

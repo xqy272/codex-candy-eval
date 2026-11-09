@@ -73,7 +73,7 @@ const rows = computed(() => props.w.batchAccounts.map((id) => {
 type Row = (typeof rows.value)[number]
 const columns: TableColumn<Row>[] = [
   { key: 'name', label: '账号', kind: 'identity', minWidth: 150 },
-  { key: 'state', label: '执行情况', kind: 'status', minWidth: 100 },
+  { key: 'state', label: '执行情况', kind: 'status', align: 'left', minWidth: 100 },
   { key: 'result', label: '检测结果', kind: 'text', minWidth: 200 },
   { key: 'elapsed', label: '耗时', kind: 'meta', minWidth: 85 },
   { key: 'actions', label: '操作', kind: 'actions', width: 100 },

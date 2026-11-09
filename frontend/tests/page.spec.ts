@@ -979,4 +979,19 @@ test('split batch columns keep completion separate from wrong candy and incomple
   await expect(table.locator('[data-result-account="a1"]')).toContainText('1 / 2 答对')
   await expect(table.locator('[data-result-account="a1"]')).toContainText('1 次未完成')
   await expect(table.locator('[data-execution-account="a2"]')).toHaveText('已完成')
+  for (const width of [1100, 1440]) {
+    await page.setViewportSize({ width, height: 1000 })
+    const positions = await table.evaluate(root => {
+      const header = [...root.querySelectorAll('th')].find(el => el.textContent?.trim() === '执行情况')!
+      const walker = document.createTreeWalker(header, NodeFilter.SHOW_TEXT)
+      let text = walker.nextNode()
+      while (text && text.textContent?.trim() !== '执行情况') text = walker.nextNode()
+      if (!text) throw Error('Execution column heading text not found')
+      const range = document.createRange()
+      range.selectNodeContents(text)
+      return { heading: range.getBoundingClientRect().left,
+        labels: [...root.querySelectorAll('[data-execution-account]')].map(el => el.firstElementChild!.getBoundingClientRect().left) }
+    })
+    for (const left of positions.labels) expect(Math.abs(left - positions.heading)).toBeLessThanOrEqual(1)
+  }
 })
