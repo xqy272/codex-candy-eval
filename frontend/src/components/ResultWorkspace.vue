@@ -47,7 +47,7 @@ const keyLabel = computed(() => {
     <div v-else-if="dialog && w.reportLoading && w.detailOpen" class="result-skeleton"><ZSkeleton /><ZSkeleton /><ZSkeleton /></div>
     <ZCard v-else-if="!w.currentBatch && !w.legacyId" padding="compact" class="result-empty">
       <h2>选择账号，开始一次检测</h2>
-      <p class="muted">{{ w.kind === 'fingerprint' ? '每账号取得三份有效样本后展示参考库候选' : w.kind === 'candy' ? '固定原题，标准答案 21，执行失败单列' : '生成后直接预览 SVG，单次最多等待 10 分钟' }}</p>
+      <p class="muted">{{ w.kind === 'fingerprint' ? '每账号取得三份有效样本后展示参考库候选' : w.kind === 'candy' ? '固定原题，标准答案 21，执行失败单列' : w.kind === 'ciallo' ? '每个账号发送一次 ciallo，查看模型原始回答' : '生成后直接预览 SVG，单次最多等待 10 分钟' }}</p>
     </ZCard>
     <p v-else-if="dialog && w.detailOpen && !w.resultRecords.length && !w.reportLoading" class="feedback notice">当前账号暂无可读结果，部分旧记录可能已淘汰</p>
   </section>

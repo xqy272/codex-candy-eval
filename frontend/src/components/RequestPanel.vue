@@ -19,7 +19,8 @@ const profileOptions = computed(() => Object.entries(profiles).map(([value, labe
       <ZFormItem label="推理强度">
         <ZSelect v-model="w.effort" aria-label="推理强度" :options="efforts" :disabled="w.busy" />
       </ZFormItem>
-      <ZFormItem label="请求语境">
+      <ZFormItem v-if="w.kind === 'ciallo'" label="固定消息"><code class="fixed-message">ciallo</code></ZFormItem>
+      <ZFormItem v-else label="请求语境">
         <ZSelect v-model="w.profile" aria-label="请求语境" :options="profileOptions" :disabled="w.busy" />
       </ZFormItem>
       <ZFormItem label="客户端 Key">

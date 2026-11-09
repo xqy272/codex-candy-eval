@@ -285,6 +285,7 @@ export function workspace() {
   }
   async function loadResult() {
     const n = ++reportSequence
+    if (!detailOpen.value) { reportLoading.value = false; return }
     const rows = [...currentRows.value]
     reportLoading.value = !resultRecords.value.length && !!rows.length
     try {

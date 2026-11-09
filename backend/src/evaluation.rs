@@ -32,6 +32,12 @@ fn default_profile() -> String {
     "simple-v1".into()
 }
 
+pub const TEST_KINDS: &[&str] = &["candy", "fingerprint", "pelican", "ciallo"];
+
+pub fn valid_profile(kind: &str, profile: &str) -> bool {
+    profile == "simple-v1" || (kind != "ciallo" && profile == "codex-context-v1")
+}
+
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RunRequest {
@@ -51,12 +57,12 @@ impl RunRequest {
         [&self.id, &self.account_id, &self.client_key_id, &self.model]
             .into_iter()
             .all(|s| !s.trim().is_empty() && s.len() <= 128 && !s.chars().any(char::is_control))
-            && matches!(self.kind.as_str(), "candy" | "fingerprint" | "pelican")
+            && TEST_KINDS.contains(&self.kind.as_str())
             && matches!(
                 self.effort.as_str(),
                 "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
             )
-            && matches!(self.profile.as_str(), "simple-v1" | "codex-context-v1")
+            && valid_profile(&self.kind, &self.profile)
             && self.step < if self.kind == "fingerprint" { 3 } else { 1 }
     }
 }
@@ -92,16 +98,21 @@ fn conflict() -> PluginFault {
 
 pub fn plan(kind: &str) -> Result<Vec<Planned>, PluginFault> {
     if kind != "fingerprint" {
+        let (prompt, instructions) = match kind {
+            "ciallo" => ("ciallo", ""),
+            "candy" | "pelican" => (
+                if kind == "candy" {
+                    prompts::CANDY
+                } else {
+                    prompts::PELICAN
+                },
+                "Answer the user's request directly without using tools or external resources.",
+            ),
+            _ => return Err(history::invalid()),
+        };
         return Ok(vec![Planned {
-            prompt: if kind == "candy" {
-                prompts::CANDY
-            } else {
-                prompts::PELICAN
-            }
-            .into(),
-            instructions:
-                "Answer the user's request directly without using tools or external resources."
-                    .into(),
+            prompt: prompt.into(),
+            instructions: instructions.into(),
             expected_count: None,
         }]);
     }
@@ -151,7 +162,10 @@ pub async fn ask_observed(
     if *cancel.borrow() {
         return Err((None, "cancelled"));
     }
-    let mut body = json!({"model":req.model,"instructions":p.instructions,"input":[{"role":"user","content":p.prompt}],"stream":true,"store":false,"tools":[],"tool_choice":"none"});
+    let mut body = json!({"model":req.model,"input":[{"role":"user","content":p.prompt}],"stream":true,"store":false,"tools":[],"tool_choice":"none"});
+    if req.kind != "ciallo" {
+        body["instructions"] = json!(p.instructions);
+    }
     if req.profile == "codex-context-v1" {
         let context: Value =
             serde_json::from_slice(include_bytes!("../../data/codex-context.json"))

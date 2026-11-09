@@ -1,0 +1,59 @@
+{
+  "observedAtUtc": "2026-11-09T12:28:16.302915+00:00",
+  "version": "1.4.3",
+  "baseCommit": "93e1e8b7c0acb6b77336cef7a66ab19596c5ae41",
+  "archive": {
+    "archiveSha256": "35b926d411832dccfd3024e0b1e38cf99f0d25f711be2cd5cc6abfdcc3173323",
+    "bytes": 6947029,
+    "files": 22,
+    "resources": 20,
+    "binarySha256": "b5754b30f8031cff836d407038f03bce994730dde4ba4254946effd50daab7de",
+    "maximumGlibc": "GLIBC_2.28",
+    "stateDeclarationsUnchanged": true,
+    "allDeclaredResourceBytesMatch": true,
+    "officialUi": {
+      "version": "0.9.1",
+      "archiveSha256": "5f219b1fce116b6a068b3e05bff680b72c0d12f55b6fc8323bfbb7d25276bcc5",
+      "lockIntegrityMatches": true
+    },
+    "pageTestsPassed": 40,
+    "declaredHostRange": ">=3.43.1, <3.45.0"
+  },
+  "rustTestsPassed": 38,
+  "rustFmt": true,
+  "allTargetsClippyWarningsDenied": true,
+  "fixedSourcesVerified": 92,
+  "frontendProductionBuild": true,
+  "uiTestsPassed": 40,
+  "nativeBusinessChecksPassed": 11,
+  "nativeUiChecksPassed": {
+    "3.43.1": 30,
+    "3.44.0": 30
+  },
+  "nativeHosts": [
+    {
+      "version": "3.43.1",
+      "binarySha256": "2e23385b35db58e30d09cc82fcf8541eb6620f82226dcb4a31680707902fb5c8"
+    },
+    {
+      "version": "3.44.0",
+      "binarySha256": "92e400640c292722232ce5aa0e7f0c8e69bc154437654f7d1585515d0114339f"
+    }
+  ],
+  "controlledRequestsFinalEnvironment": 44,
+  "controlledCialloRequests": 16,
+  "realModelRequests": 0,
+  "productionInspected": false,
+  "productionModified": false,
+  "evidence": [
+    "native-ui-business-1.4.3.json",
+    "native-ui-1.4.3.json",
+    "final-audit-1.4.3.json",
+    "credentials-cleanup-1.4.3.json"
+  ],
+  "limits": [
+    "Only official CPR 3.43.1 and 3.44.0 ran the final artifact.",
+    "Ciallo checks response completion, not identity or correctness.",
+    "Only fixture upstreams were used. Production was neither inspected nor modified."
+  ]
+}

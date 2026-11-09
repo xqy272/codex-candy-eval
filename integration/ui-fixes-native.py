@@ -5,12 +5,12 @@ import argparse, datetime, hashlib, json, tarfile, time, uuid
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('stage', choices=['idle', 'seed', 'upgrade', 'switch', 'business'])
 parser.add_argument('host_version', nargs='?', choices=['3.43.1', '3.44.0'])
-parser.add_argument('--version', choices=['1.4.1', '1.4.2'], default='1.4.1')
+parser.add_argument('--version', choices=['1.4.1', '1.4.2', '1.4.3'], default='1.4.1')
 args = parser.parse_args()
 if args.stage == 'business' and not args.host_version:
     parser.error('business requires the running official CPR version')
 version = args.version
-baseline_version = {'1.4.1': '1.4.0', '1.4.2': '1.4.1'}[version]
+baseline_version = {'1.4.1': '1.4.0', '1.4.2': '1.4.1', '1.4.3': '1.4.2'}[version]
 run = 'ui' + version.replace('.', '')
 
 c = Client()
@@ -47,12 +47,12 @@ def wait(task_id, timeout=180):
         time.sleep(.2)
     raise TimeoutError('Controlled task did not reach a terminal or paused state')
 
-def submit(kind, model, repeats=1):
+def submit(kind, model, repeats=1, terminal='completed'):
     req = {'id': uuid.uuid4().hex, 'accountIds': ids[:2], 'clientKeyId': s['clientKeyId'],
            'model': model, 'effort': '', 'kind': kind, 'profile': 'simple-v1',
            'repeats': repeats, 'concurrency': 2, 'outputVersion': 'svg-v1'}
     batch = route('api/batch-submit', req)['batch']
-    assert all(wait(task_id)['status'] == 'completed' for task_id in batch['taskIds'])
+    assert all(wait(task_id)['status'] == terminal for task_id in batch['taskIds'])
     return batch
 
 def snapshot():
@@ -128,11 +128,19 @@ elif stage == 'business':
         assert all(row['pluginVersion'] == version and row['validSamples'] == (3 if kind == 'fingerprint' else 1) for row in rows)
         if kind == 'fingerprint':
             assert all(row['attribution']['results'] for row in rows)
-        if version == '1.4.2' or kind == 'pelican':
+        if version != '1.4.1' or kind == 'pelican':
             state_key = {'candy': 'candyBatchId', 'fingerprint': 'fingerprintBatchId', 'pelican': 'drawingBatchId'}[kind]
             s[state_key] = batch['request']['id']
             persist_state()
         checkpoint('Final archive completes two-account ' + kind + ' on official CPR ' + host_version)
+    if version == '1.4.3':
+        batch = submit('ciallo', 'eval-ciallo-incomplete', terminal='paused')
+        rows = [wait(task_id) for task_id in batch['taskIds']]
+        assert all(row['reason'] == 'incomplete' and row['answerPreview'] == 'Partial Ciallo fixture.'
+                   and row['validSamples'] == 0 and len(row['attempts']) == 1 for row in rows)
+        s['incompleteCialloBatchId'] = batch['request']['id']
+        persist_state()
+        checkpoint('Final archive retains two incomplete Ciallo previews without marking success on official CPR ' + host_version)
     no_replay()
     proof['hosts'].append({'version': host_version, 'binarySha256': hashlib.sha256(binary.read_bytes()).hexdigest()})
     report.write_text(json.dumps(proof, ensure_ascii=False, indent=2))

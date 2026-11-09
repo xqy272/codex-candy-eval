@@ -45,6 +45,7 @@ h3 { font-size: calc(var(--z-font-size) * 1.6); font-weight: var(--z-font-weight
 .type-tabs { align-self: flex-start; }
 .request-fields, .history-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: var(--eval-gap); }
 .request-fields > *, .history-filters > * { min-width: 0; }
+.fixed-message { display: flex; align-items: center; min-height: var(--z-control-height); padding-inline: var(--eval-small-gap); border-radius: var(--z-border-radius); background: var(--z-color-fill-quaternary); }
 .help-popover { width: min(23rem, calc(100vw - 2rem)); max-width: 100%; padding: var(--eval-gap); overflow-wrap: anywhere; }
 .help-popover h2 { margin-bottom: var(--eval-small-gap); }
 .help-popover p + p { margin-top: var(--eval-small-gap); }
@@ -73,12 +74,21 @@ h3 { font-size: calc(var(--z-font-size) * 1.6); font-weight: var(--z-font-weight
 .result-timestamp { color: var(--z-color-text); font-weight: var(--z-font-weight-strong, 600); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .frozen-conditions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--eval-small-gap); margin-bottom: var(--eval-gap); }
 .overview-summary { display: flex; flex-direction: column; align-items: flex-start; gap: var(--eval-small-gap); white-space: normal; }
+.overview-summary > * { max-width: 100%; }
+.reply-preview { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: normal; }
+.mobile-outcome { margin-block: var(--eval-small-gap); }
+.mobile-result-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--eval-small-gap); margin-top: var(--eval-gap); }
 .mobile-results { display: none; }
 .history-table { margin-top: var(--eval-gap); }
-.history-account-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--z-size-unit); margin-top: var(--z-size-unit); white-space: normal; }
-.history-account-links > button { max-width: 100%; }
-.history-account-name { display: block; max-width: min(100%, 11rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.history-more-accounts { width: min(100%, 8rem); }
+.history-title { display: flex; align-items: center; gap: var(--eval-small-gap); min-width: 0; }
+.history-title > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-account-menu, .history-account-count { flex: none; white-space: nowrap; }
+.history-account-panel { display: grid; gap: var(--eval-small-gap); width: min(22rem, calc(100vw - 2rem)); padding: var(--eval-small-gap); }
+.history-account-options { display: grid; gap: var(--z-size-unit); max-height: 15rem; overflow: auto; overscroll-behavior: contain; }
+.history-account-options > button { justify-content: flex-start; height: auto; min-height: var(--z-control-height-sm); padding-block: var(--z-size-unit); text-align: left; }
+.history-account-option { white-space: normal; overflow-wrap: anywhere; }
+.history-card-heading { flex-wrap: wrap; align-items: center; }
+.history-card-heading .history-title { max-width: 100%; }
 .history-row > p + p { margin-top: var(--z-size-unit); }
 .history-row > button { margin-top: var(--eval-small-gap); }
 .result-dialog-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--eval-small-gap); min-width: 0; }

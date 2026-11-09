@@ -4,7 +4,7 @@ import { ZButton, ZCard, ZEmpty, ZFormItem, ZInput, ZSelect, ZTable, ZTag, type 
 import type { Batch, RecordEntry } from '../api'
 import type { Workspace } from '../workspace'
 import { executionOptions, kinds, label, profiles, recordTone, verdictOptions } from '../presentation'
-import HistoryAccountLinks from './HistoryAccountLinks.vue'
+import HistoryAccountMenu from './HistoryAccountMenu.vue'
 const props = defineProps<{ w: Workspace }>()
 const emit = defineEmits<{ open: [row: HistoryRow, account?: string, origin?: string] }>()
 export interface HistoryRow {
@@ -18,17 +18,18 @@ export interface HistoryRow {
   record?: RecordEntry
 }
 const page = ref(0)
+const testLabel = (kind: string) => kinds.find(k => k.value === kind)?.label ?? kind
 const rows = computed<HistoryRow[]>(() => [
   ...props.w.historyItems.map((b) => ({
     id: b.request.id,
-    title: (kinds.find((k) => k.value === b.request.kind)?.label ?? b.request.kind) + ' · ' + b.request.accountIds.length + ' 个账号',
+    title: testLabel(b.request.kind) + (b.request.accountIds.length === 1 ? ' · ' + props.w.batchAccountLabel(b, b.request.accountIds[0]!) : ''),
     conditions: [b.request.model, b.request.effort || '默认强度', profiles[b.request.profile]].join(' · '),
     status: props.w.batchStatus(b), startedAt: b.startedAt, batch: b,
     accounts: b.request.accountIds.map((id) => ({ label: props.w.batchAccountLabel(b, id), value: id })),
   })),
   ...props.w.legacyItems.map((r) => ({
     id: r.id,
-    title: (kinds.find((k) => k.value === r.kind)?.label ?? r.kind) + ' · ' + props.w.recordLabel(r),
+    title: testLabel(r.kind) + ' · ' + props.w.recordLabel(r),
     conditions: r.model + ' · ' + (r.task ? '独立检测' : '旧版记录'),
     status: label(r), startedAt: r.startedAt, record: r, accounts: [],
   })),
@@ -66,15 +67,27 @@ const actionLabel = (row: HistoryRow) => row.accounts.length > 1 && !preferredAc
       </div>
     </ZCard>
     <ZTable v-if="rows.length" class="history-table desktop-results" :columns="columns" :data="paged" row-key="id">
-      <template #title="{ row }"><strong>{{ row.title }}</strong><HistoryAccountLinks v-if="!w.filterAccount" :batch-id="row.id" :accounts="row.accounts" @open="(id, origin) => emit('open', row, id, origin)" /></template>
+      <template #title="{ row }">
+        <div class="history-title">
+          <strong :title="row.title">{{ row.title }}</strong>
+          <HistoryAccountMenu v-if="row.accounts.length > 1 && !w.filterAccount" :batch-id="row.id" :accounts="row.accounts" @open="(id, origin) => emit('open', row, id, origin)" />
+          <span v-else-if="row.accounts.length > 1" class="muted history-account-count">{{ row.accounts.length }} 个账号</span>
+        </div>
+      </template>
       <template #status="{ row }"><ZTag size="small" :type="batchTone(row)">{{ row.status }}</ZTag></template>
       <template #actions="{ row }"><ZButton :data-return-history="row.id" size="small" @click="emit('open', row, preferredAccount(row))">{{ actionLabel(row) }}</ZButton></template>
     </ZTable>
     <div v-if="rows.length" class="mobile-results">
       <ZCard v-for="row in paged" :key="row.id" padding="compact" class="history-row">
-        <div class="aside-heading"><strong>{{ row.title }}</strong><ZTag size="small" :type="batchTone(row)">{{ row.status }}</ZTag></div>
+        <div class="aside-heading history-card-heading">
+          <div class="history-title">
+            <strong :title="row.title">{{ row.title }}</strong>
+            <HistoryAccountMenu v-if="row.accounts.length > 1 && !w.filterAccount" :batch-id="row.id" :accounts="row.accounts" @open="(id, origin) => emit('open', row, id, origin)" />
+            <span v-else-if="row.accounts.length > 1" class="muted history-account-count">{{ row.accounts.length }} 个账号</span>
+          </div>
+          <ZTag size="small" :type="batchTone(row)">{{ row.status }}</ZTag>
+        </div>
         <p class="muted">{{ row.conditions }}</p><p class="muted">{{ new Date(row.startedAt).toLocaleString() }}</p>
-        <HistoryAccountLinks v-if="!w.filterAccount" :batch-id="row.id" :accounts="row.accounts" @open="(id, origin) => emit('open', row, id, origin)" />
         <ZButton :data-return-history="row.id" size="small" @click="emit('open', row, preferredAccount(row))">{{ actionLabel(row) }}</ZButton>
       </ZCard>
     </div>

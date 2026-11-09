@@ -83,6 +83,7 @@ export interface Sample {
   durationMs: number
 }
 export interface RecordEntry {
+  answerPreview?: string | null
   batchId?: string | null
   clientKeyId?: string | null
   outputVersion?: string | null

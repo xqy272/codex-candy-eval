@@ -394,13 +394,19 @@ pub struct Job {
     pub batch_id: Option<String>,
     #[serde(default)]
     pub output_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer_preview: Option<String>,
 }
 impl Job {
     fn terminal(&self) -> bool {
         matches!(self.status.as_str(), "completed" | "stopped")
     }
     fn record(&self) -> Value {
-        json!({"task":true,"id":self.request.id,"batchId":self.batch_id,"outputVersion":self.output_version,"accountId":self.request.account_id,"accountName":self.account_name,"clientKeyId":self.request.client_key_id,"kind":self.request.kind,"model":self.request.model,"effort":self.request.effort,"requestProfile":self.request.profile,"status":self.status,"reason":self.reason,"verdict":self.verdict,"startedAt":self.started_at,"updatedAt":self.updated_at,"durationMs":self.duration_ms,"expectedSamples":self.plan.len(),"validSamples":self.accepted.iter().flatten().count(),"attempts":self.attempts,"sampleBytes":self.attempts.iter().map(|a|a.bytes).sum::<u64>(),"samples":[],"attribution":self.attribution,"detectorVersion":self.detector_version,"detectorRevision":self.detector_revision,"sourceHashes":self.source_hashes,"pluginVersion":self.plugin_version,"stopRequested":self.stop_requested,"canResume":self.status=="paused" && self.attempts.len()<MAX_ATTEMPTS && !matches!(self.reason.as_deref(),Some("identity_changed"|"baseline_changed"|"account_unavailable"|"permission_denied"))})
+        let mut value = json!({"task":true,"id":self.request.id,"batchId":self.batch_id,"outputVersion":self.output_version,"accountId":self.request.account_id,"accountName":self.account_name,"clientKeyId":self.request.client_key_id,"kind":self.request.kind,"model":self.request.model,"effort":self.request.effort,"requestProfile":self.request.profile,"status":self.status,"reason":self.reason,"verdict":self.verdict,"startedAt":self.started_at,"updatedAt":self.updated_at,"durationMs":self.duration_ms,"expectedSamples":self.plan.len(),"validSamples":self.accepted.iter().flatten().count(),"attempts":self.attempts,"sampleBytes":self.attempts.iter().map(|a|a.bytes).sum::<u64>(),"samples":[],"attribution":self.attribution,"detectorVersion":self.detector_version,"detectorRevision":self.detector_revision,"sourceHashes":self.source_hashes,"pluginVersion":self.plugin_version,"stopRequested":self.stop_requested,"canResume":self.status=="paused" && self.attempts.len()<MAX_ATTEMPTS && !matches!(self.reason.as_deref(),Some("identity_changed"|"baseline_changed"|"account_unavailable"|"permission_denied"))});
+        if let Some(preview) = &self.answer_preview {
+            value["answerPreview"] = json!(preview);
+        }
+        value
     }
 }
 #[derive(Serialize, Deserialize)]
@@ -504,7 +510,12 @@ async fn save(host: &HostClient, job: &Job) -> Result<(), PluginFault> {
     for r in &mut rows {
         r["attempts"] = json!([]);
         if let Some(a) = r["attribution"].as_object_mut() {
-            a.retain(|k, _| matches!(k.as_str(), "prediction_name" | "decision" | "used_outputs"));
+            a.retain(|k, _| {
+                matches!(
+                    k.as_str(),
+                    "prediction_name" | "probability" | "decision" | "used_outputs"
+                )
+            });
         }
     }
     put(host, "queue", "index", json!({"records":rows}), version).await
@@ -657,6 +668,7 @@ async fn new_job(
         plugin_version: env!("CARGO_PKG_VERSION").into(),
         batch_id,
         output_version,
+        answer_preview: None,
     })
 }
 pub async fn report(host: &HostClient, id: &str) -> Result<Value, PluginFault> {
@@ -818,8 +830,22 @@ fn accept(state: &AppState, job: &Job, step: usize, o: &Outcome) -> bool {
         )
         .is_ok_and(|a| a.used_outputs == 1)
 }
+fn answer_preview(text: &str) -> String {
+    const LIMIT: usize = 512;
+    if text.len() <= LIMIT {
+        return text.into();
+    }
+    let mut end = LIMIT - '…'.len_utf8();
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &text[..end])
+}
 fn attach(state: &AppState, job: &mut Job, p: Pending, o: Outcome, bytes: u64) {
     let valid = accept(state, job, p.step, &o);
+    if job.request.kind == "ciallo" {
+        job.answer_preview = o.answer.as_ref().map(|a| answer_preview(&a.text));
+    }
     if valid {
         job.accepted[p.step] = Some(p.key.clone());
     }
@@ -897,6 +923,7 @@ async fn score(state: &AppState, host: &HostClient, job: &mut Job) -> Result<(),
             );
             job.attribution = Some(serde_json::to_value(analysis).map_err(|_| history::invalid())?);
         }
+        "ciallo" => job.verdict = Some("responded".into()),
         _ => job.verdict = Some("output".into()),
     }
     job.status = "completed".into();

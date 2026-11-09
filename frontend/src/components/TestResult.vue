@@ -40,7 +40,7 @@ const resultTone = computed(() => props.records.length > 1
   : current.value ? recordTone(current.value) : 'default')
 const retryText = (r: RecordEntry) => r.reason === 'scoring_failed' ? '重新分析 · 不发请求'
   : r.kind === 'fingerprint' ? '补测 ' + Math.max(0, (r.expectedSamples ?? 3) - (r.validSamples ?? 0)) + ' 个样本'
-    : r.kind === 'candy' ? '补测 1 次回答' : '重新生成 · 1 次请求'
+    : r.kind === 'pelican' ? '重新生成 · 1 次请求' : '补测 1 次回答'
 function retry(r: RecordEntry) {
   if (r.reason === 'uncertain' && retryConfirm.value !== r.id) { retryConfirm.value = r.id; return }
   emit('action', 'resume', r)
@@ -84,7 +84,7 @@ function exportSummary() {
       </div>
       <div v-if="current.status === 'paused'" class="feedback warning">
         <strong>{{ current.kind === 'fingerprint' ? '已保留 ' + (current.validSamples ?? 0) + ' / 3 个有效样本' : current.kind === 'pelican' ? '未取得完整作品' : '本次回答未完成' }}</strong>
-        <p>{{ reasons[current.reason ?? ''] ?? '请求未完成，已保留取得的内容' }}</p>
+        <p>{{ current.kind === 'ciallo' && current.reason === 'incomplete' ? '响应未完整结束，已保留收到的正文。' : reasons[current.reason ?? ''] ?? '请求未完成，已保留取得的内容' }}</p>
       </div>
       <div v-if="current.kind === 'fingerprint'" class="sample-strip">
         <div v-for="n in 3" :key="n"><span>样本 {{ n }}</span><small>{{ current.attempts?.some((a) => a.step === n - 1 && a.valid) || current.status === 'completed' && current.attribution?.used_outputs === 3 ? '已保存 · 有效' : current.progress?.step === n - 1 ? '执行中' : '未完成' }}</small></div>
@@ -126,7 +126,7 @@ function exportSummary() {
         <article v-for="(s, i) in inspected.samples" :key="i" class="sample">
           <div class="sample-heading"><h2>尝试 {{ i + 1 }}<span v-if="current.kind === 'fingerprint'" class="muted"> · 样本 {{ (s.step ?? i) + 1 }}</span></h2><ZTag size="small" :type="s.valid === false ? 'warning' : s.status === 'completed' ? 'success' : 'default'">{{ s.valid === false ? '未作为有效结果' : s.status === 'completed' ? '完整完成' : '未完成' }} · {{ duration(s.durationMs) }}</ZTag></div>
           <AnswerBody :source="s.answer?.text ?? ''" :code="current.kind === 'pelican'" :label="'尝试 ' + (i + 1) + ' 回答'" @copy="copy" />
-          <p v-if="s.error?.origin === 'plugin'" class="feedback warning">达到插件 {{ (s.error.timeoutMs ?? 0) / 1000 }} 秒等待上限，部分回答不参与判分</p>
+          <p v-if="s.error?.origin === 'plugin'" class="feedback warning">达到插件 {{ (s.error.timeoutMs ?? 0) / 1000 }} 秒等待上限，未取得完整回答</p>
           <p v-else-if="s.error" class="feedback warning">{{ s.error.code }} · {{ s.error.kind ?? '未提供细分原因' }} · HTTP {{ s.error.httpStatus ?? '未知' }}</p>
         </article>
         <p v-if="!inspected.samples.length" class="muted">尚未保存回答，已接收的内容显示在执行进度中</p>
@@ -154,7 +154,7 @@ function exportSummary() {
         <article v-for="(s, i) in inspected.samples" :key="i" class="sample request-sample">
           <h2>尝试 {{ i + 1 }} 的请求</h2><p class="muted">请求 ID：{{ s.requestId ?? '未知' }}</p>
           <div v-if="s.instructions"><h4>指令</h4><pre>{{ s.instructions }}</pre></div>
-          <div><h4>题目</h4><pre>{{ s.prompt || '旧版未记录' }}</pre></div>
+          <div><h4>{{ current.kind === 'ciallo' ? '消息' : '题目' }}</h4><pre>{{ s.prompt || '旧版未记录' }}</pre></div>
         </article>
       </section>
       <details class="evidence">

@@ -112,7 +112,7 @@ pub fn registration() -> ManagementRegistration {
         pages: vec![ManagementPage {
             id: "codex-candy-eval".into(),
             title: "模型测试".into(),
-            description: Some("糖果题、模型指纹与画鹈鹕".into()),
+            description: Some("糖果题、模型指纹、画鹈鹕与 Ciallo".into()),
             entry: "web/index.html".into(),
             icon: None,
         }],

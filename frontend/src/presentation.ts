@@ -20,6 +20,7 @@ export const kinds = [
   { label: '糖果题', value: 'candy' },
   { label: '模型指纹', value: 'fingerprint' },
   { label: '画鹈鹕', value: 'pelican' },
+  { label: 'Ciallo', value: 'ciallo' },
 ]
 export const profiles: Record<string, string> = {
   'simple-v1': '简洁请求',
@@ -50,6 +51,7 @@ export const reasons: Record<string, string> = {
   event_too_large: '单个响应事件超过读取上限。',
 }
 export function label(r: RecordEntry): string {
+  if (r.kind === 'ciallo' && r.status === 'completed') return '完整返回'
   if (r.status === 'completed' && r.task) {
     if (r.kind === 'candy') return r.verdict === 'correct' ? '答对' : '答错'
     if (r.kind === 'fingerprint')
@@ -82,6 +84,7 @@ export function active(r: RecordEntry) {
 }
 
 export function duration(ms: number) {
+  if (ms > 0 && ms < 1000) return Math.round(ms) + ' 毫秒'
   const seconds = Math.max(0, Math.floor(ms / 1000))
   return seconds >= 60
     ? Math.floor(seconds / 60) + ' 分 ' + (seconds % 60) + ' 秒'
@@ -94,6 +97,7 @@ export function verdict(r: RecordEntry) {
   if (r.status === 'wrong') return 'wrong'
   if (r.kind === 'fingerprint' && r.attribution?.results.length) return 'ranked'
   if (r.kind === 'pelican' && r.status === 'completed') return 'output'
+  if (r.kind === 'ciallo' && r.status === 'completed') return 'responded'
   return ''
 }
 
@@ -138,4 +142,5 @@ export const verdictOptions = [
   { label: '糖果答错', value: 'wrong' },
   { label: '指纹候选排名', value: 'ranked' },
   { label: '绘图已生成', value: 'output' },
+  { label: 'Ciallo 完整返回', value: 'responded' },
 ]

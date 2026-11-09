@@ -141,7 +141,7 @@ async function mock(
                           ? 'wrong'
                           : d.kind === 'fingerprint'
                             ? 'ranked'
-                            : 'output',
+                            : d.kind === 'ciallo' ? 'responded' : 'output',
                       validSamples: count,
                       expectedSamples: d.kind === 'fingerprint' ? 3 : 1,
                       canResume: paused,
@@ -150,6 +150,7 @@ async function mock(
                       durationMs: 100,
                       attempts,
                       samples: [],
+                      answerPreview: d.kind === 'ciallo' ? (o.responseText ?? '你好，今天有什么可以帮你？') : undefined,
                       attribution:
                         d.kind === 'fingerprint' && !paused
                           ? {
@@ -195,13 +196,13 @@ async function mock(
                     : '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><defs><linearGradient id="paint"><stop stop-color="#e6edf4"/></linearGradient></defs><rect width="360" height="200" fill="url(#paint)"/><text x="20" y="90">Pelican</text><script>parent.__unsafe=true</script><image href="https://example.invalid/leak"/></svg>'
                   : r.kind === 'candy'
                     ? o.responseText ?? '22'
-                    : '1, 2, 3'
+                    : r.kind === 'ciallo' ? '你好，今天有什么可以帮你？' : '1, 2, 3'
               return encode({
                 sample: {
                   step: 0,
                   valid: true,
                   status: 'completed',
-                  prompt: '冻结测试题',
+                  prompt: r.kind === 'ciallo' ? 'ciallo' : '冻结测试题',
                   instructions: '',
                   durationMs: 100,
                   requestId: 'fixture-only',
@@ -847,13 +848,38 @@ test('incomplete and missing batches never label a submission or surviving sampl
   await expect(page.locator('.current-batch')).not.toContainText('完成于')
 })
 
-test('history opens a named account directly, switches in place, and backs out one level', async ({ page }) => {
-  await mock(page)
+test('history keeps six accounts in one compact row and opens the searched account directly', async ({ page }) => {
+  const accounts = Array.from({ length: 6 }, (_, i) => ({
+    account_id: 'a' + (i + 1), name: i < 2 ? '测试账号 ' + 'AB'[i] : 'long.fixture.mailbox.' + (i + 1) + '@example.invalid',
+    email: null, enabled: true,
+  }))
+  await mock(page, { accounts })
   await prepare(page, '糖果题', true)
+  await page.getByRole('button', { name: '选择筛选结果', exact: true }).click()
   await start(page)
+  await expect(page.locator('.current-batch')).toContainText('完成 6 / 6 个账号')
+  await page.getByRole('button', { name: '取消选择', exact: true }).click()
+  await selectAccount(page, '测试账号 A')
+  await start(page)
+  await expect(page.getByRole('dialog', { name: '检测结果', exact: true })).toBeVisible()
+  await closeResult(page)
   await navigate(page, '记录')
-  const shortcut = page.locator('.history-table').getByRole('button', { name: '查看 测试账号 B 结果', exact: true })
-  await shortcut.click()
+  const table = page.locator('.history-table')
+  const picker = table.getByRole('button', { name: '查看批次账号 · 6 个账号', exact: true })
+  const rows = table.locator('tbody tr')
+  await expect(rows).toHaveCount(2)
+  const rowHeights = await rows.evaluateAll(els => els.map(el => el.getBoundingClientRect().height))
+  expect(Math.abs(rowHeights[0]! - rowHeights[1]!)).toBeLessThanOrEqual(4)
+  await expect(table).not.toContainText('@example.invalid')
+  await picker.click()
+  const menu = page.getByRole('dialog', { name: '查看批次账号', exact: true })
+  const search = menu.getByRole('textbox', { name: '搜索批次账号', exact: true })
+  await expect(search).toBeFocused()
+  await expect(menu.getByRole('button')).toHaveCount(6)
+  await expect(menu.getByText(accounts[5]!.name, { exact: true })).toBeVisible()
+  await search.fill('a2')
+  await expect(menu.getByRole('button')).toHaveCount(1)
+  await menu.getByRole('button', { name: '查看 测试账号 B 结果', exact: true }).click()
   const detail = page.getByRole('dialog', { name: '检测结果', exact: true })
   await expect(detail.getByRole('heading', { name: '测试账号 B' })).toBeVisible()
   await choose(page, '切换批次账号', '测试账号 A')
@@ -867,9 +893,90 @@ test('history opens a named account directly, switches in place, and backs out o
   await detail.getByRole('button', { name: '返回批次' }).click()
   await expect(batch).toBeVisible()
   await batch.getByRole('button', { name: '关闭批次' }).click()
-  await expect(shortcut).toBeFocused()
+  await expect(picker).toBeFocused()
   await choose(page, '筛选账号', '测试账号 B')
   await page.locator('.history-table').getByRole('button', { name: '查看结果', exact: true }).click()
   await expect(detail.getByRole('heading', { name: '测试账号 B' })).toBeVisible()
+  expect(await submissions(page)).toHaveLength(2)
+})
+
+test('Ciallo uses one fixed request per account and displays completed text without grading', async ({ page }) => {
+  await mock(page)
+  await prepare(page, 'Ciallo')
+  await expect(page.getByLabel('下一次检测配置')).toContainText('ciallo')
+  await expect(page.getByRole('combobox', { name: '请求语境', exact: true })).toHaveCount(0)
+  await expect(page.getByText('1 次计划请求', { exact: true })).toBeVisible()
+  await start(page)
+  const detail = page.getByRole('dialog', { name: '检测结果', exact: true })
+  await expect(detail).toContainText('完整返回')
+  await expect(detail.getByLabel('实际回答')).toContainText('你好，今天有什么可以帮你？')
+  await expect(detail.getByLabel('请求详情')).toContainText('ciallo')
+  await expect(detail.getByLabel('请求概况')).toContainText('100 毫秒')
+  await expect(detail.getByLabel('请求概况')).toContainText('36 Token')
+  await expect(detail).not.toContainText('标准答案')
+  await closeResult(page)
+  const overview = page.locator('.batch-results .desktop-results')
+  await expect(overview.getByRole('columnheader')).toHaveText(['账号', '执行情况', '检测结果', '耗时', '操作'])
+  await expect(overview.locator('[data-execution-account="a1"]')).toHaveText('完整返回')
+  await expect(overview.locator('[data-result-account="a1"]')).toHaveText('你好，今天有什么可以帮你？')
+  await navigate(page, '记录')
+  await choose(page, '筛选测试', 'Ciallo')
+  await choose(page, '筛选结果', 'Ciallo 完整返回')
+  await expect(page.locator('.history-table')).toContainText('Ciallo · 测试账号 A')
+  await page.locator('.history-table').getByRole('button', { name: '查看结果', exact: true }).click()
+  await expect(detail).toContainText('完整返回')
+  const submitted = await submissions(page)
+  expect(submitted).toHaveLength(1)
+  expect(submitted[0].data).toMatchObject({ kind: 'ciallo', profile: 'simple-v1', repeats: 1, accountIds: ['a1'] })
+})
+
+test('Ciallo overview previews each reply without loading full samples and keeps partial responses distinct', async ({ page }) => {
+  await mock(page)
+  await prepare(page, 'Ciallo', true)
+  await start(page)
+  const table = page.locator('.batch-results .desktop-results')
+  await expect(table.locator('[data-result-account="a2"]')).toContainText('你好，今天有什么可以帮你？')
+  expect((await calls(page)).filter(call => ['api/task', 'api/sample'].includes(call.path))).toHaveLength(0)
+  await page.evaluate(() => {
+    const [first, second] = (window as any).__fixture.rows
+    Object.assign(first, { status: 'paused', reason: 'incomplete', verdict: null, validSamples: 0, answerPreview: 'Ciallo <img src=x onerror="window.__unsafe=true"> 已收到的片段' })
+    Object.assign(second, { status: 'running', progress: { phase: 'receiving_text', partialText: '正在接收的回复', startedAt: Date.now(), textBytes: 21 } })
+  })
+  await expect(table.locator('[data-execution-account="a1"]')).toContainText('未完成')
+  await expect(table.locator('[data-result-account="a1"]')).toContainText('已收到的片段')
+  await expect(table.locator('[data-result-account="a1"]')).toContainText('未完整结束')
+  await expect(table.locator('[data-execution-account="a2"]')).toContainText('执行中')
+  await expect(table.locator('[data-result-account="a2"]')).toContainText('正在接收的回复')
+  await expect(table.locator('[data-result-account="a2"]')).not.toContainText('你好，今天')
+  await expect(table.locator('img')).toHaveCount(0)
+  expect(await page.evaluate(() => (window as any).__unsafe)).toBeUndefined()
+  await page.setViewportSize({ width: 320, height: 900 })
+  const mobile = page.locator('.batch-results .mobile-results')
+  await expect(mobile.locator('[data-result-account="a1"]')).toContainText('已收到的片段')
+  expect(await mobile.locator('.reply-preview').first().evaluate(el => getComputedStyle(el).webkitLineClamp)).toBe('2')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   expect(await submissions(page)).toHaveLength(1)
+})
+
+test('split batch columns keep completion separate from wrong candy and incomplete repeats', async ({ page }) => {
+  await mock(page)
+  await prepare(page, '糖果题', true)
+  await start(page)
+  const table = page.locator('.batch-results .desktop-results')
+  await expect(table.locator('[data-execution-account="a1"]')).toHaveText('已完成')
+  await expect(table.locator('[data-result-account="a1"]')).toHaveText('答错')
+  await expect(table).not.toContainText('1 / 1')
+  await choose(page, '每账号次数', '3 次')
+  await start(page)
+  await page.evaluate(() => {
+    const fixture = (window as any).__fixture
+    const id = fixture.batches[0].request.id
+    const account = fixture.rows.filter((row: any) => row.batchId === id && row.accountId === 'a1')
+    account[0].verdict = 'correct'
+    Object.assign(account[2], { status: 'paused', verdict: null, canResume: true, validSamples: 0 })
+  })
+  await expect(table.locator('[data-execution-account="a1"]')).toContainText('等待处理')
+  await expect(table.locator('[data-result-account="a1"]')).toContainText('1 / 2 答对')
+  await expect(table.locator('[data-result-account="a1"]')).toContainText('1 次未完成')
+  await expect(table.locator('[data-execution-account="a2"]')).toHaveText('已完成')
 })

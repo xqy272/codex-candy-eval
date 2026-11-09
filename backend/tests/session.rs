@@ -274,11 +274,16 @@ impl Host {
                         let body: Value = serde_json::from_slice(&frame.payload).unwrap();
                         assert_eq!(body["store"], false);
                         assert_eq!(body["tool_choice"], "none");
-                        if !body["tools"].as_array().unwrap().is_empty() {
+                        if params["model"] == "eval-ciallo" {
+                            assert_eq!(body["input"], json!([{"role":"user","content":"ciallo"}]));
+                            assert!(body.get("instructions").is_none());
+                            assert_eq!(body["tools"], json!([]));
+                        } else if !body["tools"].as_array().unwrap().is_empty() {
                             assert!(body["instructions"].as_str().unwrap().len() > 20000);
                             assert!(body["input"].as_array().unwrap().len() > 3);
+                        } else {
+                            assert!(body["instructions"].is_string());
                         }
-                        assert!(body["instructions"].is_string());
                         self.reply(
                             id,
                             json!({"request_id":"request-test","stream":"stream-test"}),
@@ -978,6 +983,64 @@ async fn stable_upstream_identity_allows_credential_refresh() {
 
 fn batch(id: &str, kind: &str, repeats: usize) -> Value {
     json!({"id":id,"accountIds":["account-test"],"clientKeyId":"key-test","model":"gpt-test","effort":"","kind":kind,"profile":"simple-v1","repeats":repeats,"concurrency":2,"outputVersion":"svg-v1"})
+}
+#[tokio::test]
+async fn ciallo_sends_one_plain_message_and_requires_a_complete_text_response() {
+    let mut h = Host::start().await;
+    let probe = |id, repeats| {
+        let mut req = batch(id, "ciallo", repeats);
+        req["model"] = json!("eval-ciallo");
+        req
+    };
+    let mut with_context = probe("context", 1);
+    with_context["profile"] = json!("codex-context-v1");
+    h.call(1, "api/batch-submit", Some(with_context)).await;
+    assert_eq!(h.result(1, "", false, true).await.0, 400);
+    h.call(3, "api/batch-submit", Some(probe("repeat", 3)))
+        .await;
+    assert_eq!(h.result(3, "", false, true).await.0, 400);
+    assert_eq!(h.executes, 0);
+
+    h.call(5, "api/batch-submit", Some(probe("probe", 1))).await;
+    let (status, response) = h.result(5, "", false, true).await;
+    assert_eq!(status, 200);
+    assert_eq!(response["batch"]["taskIds"], json!(["probe-0-0"]));
+    h.maintenance(7, 180000).await;
+    let greeting = "你好👋".repeat(100);
+    h.result(7, &greeting, true, true).await;
+    assert_eq!(h.executes, 1);
+    let job = &h.jobs["tasks/probe-0-0"].0;
+    assert_eq!(job["status"], "completed");
+    assert_eq!(job["verdict"], "responded");
+    let preview = job["answerPreview"].as_str().unwrap();
+    assert!(preview.len() <= 512 && preview.starts_with("你好👋") && preview.ends_with('…'));
+    let summary = &h.jobs["queue/index"].0["records"][0];
+    assert_eq!(summary["answerPreview"], job["answerPreview"]);
+    assert_eq!(summary["attempts"], json!([]));
+    let key = job["attempts"][0]["key"].clone();
+    h.call(9, "api/sample", Some(json!({"id":"probe-0-0","key":key})))
+        .await;
+    let (status, sample) = h.result(9, "", false, true).await;
+    assert_eq!(status, 200);
+    let sample = &sample["sample"];
+    assert_eq!(sample["prompt"], "ciallo");
+    assert_eq!(sample["answer"]["text"], greeting);
+
+    h.call(11, "api/batch-submit", Some(probe("truncated", 1)))
+        .await;
+    assert_eq!(h.result(11, "", false, true).await.0, 200);
+    h.maintenance(13, 180000).await;
+    h.result(13, "Partial text", false, true).await;
+    assert_eq!(h.jobs["tasks/truncated-0-0"].0["status"], "paused");
+    assert_eq!(h.jobs["tasks/truncated-0-0"].0["reason"], "incomplete");
+    assert_eq!(
+        h.jobs["tasks/truncated-0-0"].0["answerPreview"],
+        "Partial text"
+    );
+    h.maintenance(15, 180000).await;
+    h.result(15, "", false, true).await;
+    assert_eq!(h.executes, 2);
+    h.shutdown().await;
 }
 #[tokio::test]
 async fn batch_repeats_are_idempotent_and_freeze_conditions() {

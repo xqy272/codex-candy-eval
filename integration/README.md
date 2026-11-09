@@ -1,3 +1,22 @@
+# 1.4.3 Ciallo 单词请求与紧凑历史行验收
+
+沿用下节的官方 CPR 3.43.1 / 3.44.0 隔离环境。准备发布的 1.4.2 和最终 1.4.3 归档，按顺序执行：
+
+```bash
+python3 integration/native_client.py --baseline dist/cloudops.codex-candy-eval-1.4.2-x86_64-unknown-linux-gnu.tar.gz
+python3 integration/ui-fixes-native.py --version 1.4.3 seed
+python3 integration/ui-fixes-native.py --version 1.4.3 upgrade
+python3 integration/ui-fixes-native.py --version 1.4.3 business 3.43.1
+node integration/result-report-browser.mjs 3.43.1 1.4.3
+python3 integration/ui-fixes-native.py --version 1.4.3 switch
+python3 integration/ui-fixes-native.py --version 1.4.3 business 3.44.0
+node integration/result-report-browser.mjs 3.44.0 1.4.3
+```
+
+业务在每版宿主额外保存两个未完整结束的 Ciallo，核对片段可读但状态仍暂停。浏览器复用隔离数据验证分栏和旧功能，再从 UI 提交六账号 Ciallo。按新批次 ID 等待六个持久任务完成，受控账本必须恰好新增六条、每个固定账号一次，输入只有 `ciallo`。检查各账号外部摘要与执行状态、六账号历史行只占一个入口、长邮箱搜索和结果直达、窄屏、原入口焦点及刷新恢复；这些查看动作不增加请求。证据保存在 `.runtime/integration/ui143-*`，按下节停止及清理临时环境。
+
+---
+
 # 1.4.2 批次时间、检测报告与真实滚动验收
 
 按 1.4.1 小节启动同样的全新临时宿主；准备已发布的 1.4.1 和最终 1.4.2 安装包。逐条运行，业务、浏览器和宿主切换不并行：
