@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ZButton, ZCard, ZFormItem, ZPopover, ZSelect, ZTag } from '@codex-proxy/ui'
+import { ZButton, ZCard, ZFormItem, ZPopover, ZSelect } from '@codex-proxy/ui'
 import type { Workspace } from '../workspace'
 import { profiles } from '../presentation'
 defineProps<{ w: Workspace }>()
@@ -23,10 +23,9 @@ const profileOptions = computed(() => Object.entries(profiles).map(([value, labe
         <ZSelect v-model="w.profile" aria-label="请求语境" :options="profileOptions" :disabled="w.busy" />
       </ZFormItem>
       <ZFormItem label="客户端 Key">
-        <div v-if="w.keys.length === 1" class="single-key"><ZTag>{{ w.keys[0]!.name }}</ZTag></div>
-        <ZSelect v-else v-model="w.keyId" aria-label="客户端 Key"
-          :options="w.keys.map((k) => ({ label: k.name, value: k.id }))"
-          :placeholder="w.keys.length ? '请选择 Key' : '暂无可用 Key'" :disabled="w.busy" />
+        <ZSelect v-model="w.keyId" aria-label="客户端 Key" filterable
+          :options="w.keys.map((k) => ({ label: k.name || '未命名 Key', value: k.id, description: w.keys.filter((other) => other.name === k.name).length > 1 ? k.id : undefined }))"
+          :placeholder="w.keys.length ? '请选择 Key' : '暂无可用 Key'" :disabled="w.busy || !w.keys.length" />
       </ZFormItem>
       <ZFormItem v-if="w.kind === 'candy'" label="每账号次数">
         <ZSelect v-model="w.repeats" aria-label="每账号次数"
@@ -48,9 +47,12 @@ const profileOptions = computed(() => Object.entries(profiles).map(([value, labe
       </div>
       <ZPopover trigger="click">
         <template #reference><ZButton size="small" variant="text">额度说明</ZButton></template>
-        <p>检测消耗所选账号额度，同一账号逐题执行</p>
-        <p>计划请求数不包含宿主可能发生的上游重试</p>
-        <p>并行数是插件上限，实际执行还受账号与 Key 限制</p>
+        <section class="help-popover" aria-label="额度说明内容">
+          <h2>额度说明</h2>
+          <p>检测消耗所选账号额度，同一账号逐题执行</p>
+          <p>计划请求数不包含宿主可能发生的上游重试</p>
+          <p>并行数是插件上限，实际执行还受账号与 Key 限制</p>
+        </section>
       </ZPopover>
       <ZButton class="start-button" type="primary" :disabled="!w.ready" :loading="w.busy" @click="w.start">
         {{ w.currentBatch ? '新建检测' : '开始检测' }} · {{ w.selected.length }} 个账号

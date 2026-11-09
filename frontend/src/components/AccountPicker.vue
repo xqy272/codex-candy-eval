@@ -14,12 +14,12 @@ function select(w: Workspace, id: string, value: boolean) {
       <ZButton size="small" variant="text" :disabled="w.busy" @click="w.toggleFiltered(true)">选择筛选结果</ZButton>
       <ZButton size="small" variant="text" :disabled="w.busy" @click="w.toggleFiltered(false)">取消选择</ZButton>
     </div>
-    <ZScrollbar max-height="30rem">
+    <ZScrollbar class="account-list" max-height="32rem">
       <div v-for="a in w.pageAccounts" :key="a.account_id" class="account-row">
         <ZCheckbox :model-value="w.selected.includes(a.account_id)" :disabled="!a.enabled || w.busy"
           :aria-label="'选择 ' + w.accountLabel(a.account_id)" @update:model-value="select(w, a.account_id, $event)">
           <template #label>
-            <span class="account-identity"><strong>{{ w.accountLabel(a.account_id) }}</strong><small>{{ a.enabled ? '可用' : '已停用' }}</small></span>
+            <span class="account-identity"><strong :title="w.accountLabel(a.account_id)">{{ w.accountLabel(a.account_id) }}</strong><small>{{ a.enabled ? '可用' : '已停用' }}</small></span>
           </template>
         </ZCheckbox>
       </div>

@@ -1,0 +1,256 @@
+{
+  "runs": [
+    {
+      "hostVersion": "3.43.1",
+      "archiveSha256": "545d20933f6a622666bc1e01484181cad9e0141534d450e209505eb2d9cd93e0",
+      "checks": [
+        "Browser verification starts only after controlled business tasks are quiescent",
+        "Native opaque iframe preserves private drafts without Web Storage",
+        "Declared font resources load in the actual host",
+        "Only one enabled Key exists in the initial native fixture",
+        "A single enabled Key still has the full searchable native selector",
+        "Key search narrows to the selected account-independent client Key",
+        "Unique Key selection shows its readable name without internal ID clutter",
+        "Account sidebar is at least 18rem wide in the native desktop frame",
+        "Long email has an intact full label and a single readable line",
+        "Host accepts warm-soft theme through its own store",
+        "Actual iframe inherits host theme tokens for warm-soft",
+        "Native help popover has padding and wrapped content",
+        "UI completion is correlated with the newly created batch ID and all six durable tasks",
+        "Two-account repeated-candy UI run sends exactly six controlled requests",
+        "Frozen batch uses the stable ID chosen in the Key selector",
+        "Result panel and close button fit the actual host viewport height",
+        "Actual final-archive Markdown renders emphasis, tables and inline/display MathML",
+        "Original answers and attempts are directly displayed outside disclosure widgets",
+        "Request facts, IDs, prompts and instructions are directly displayed",
+        "Repeat selectors use short verdict labels without raw Markdown",
+        "Raw response and copy fallback preserve the exact original Markdown and math delimiters",
+        "Diagnostics retain all original repeated responses in the native clipboard fallback",
+        "Host accepts dark theme through its own store",
+        "Actual iframe inherits host theme tokens for dark",
+        "Host accepts custom theme through its own store",
+        "Actual iframe inherits host theme tokens for custom",
+        "Customized host control height reaches the embedded official controls",
+        "Host accepts warm-soft theme through its own store",
+        "Actual iframe inherits host theme tokens for warm-soft",
+        "Result close returns focus to the original account row",
+        "History modal preserves filters and returns to the original list",
+        "Escape closes the artwork preview and leaves its parent result dialog open",
+        "Close button stays in the visible 390px host viewport",
+        "Actual result dialog fits 390px host viewport without horizontal overflow",
+        "Native workbench has no horizontal overflow at 390px",
+        "Close button stays in the visible 320px host viewport",
+        "Actual result dialog fits 320px host viewport without horizontal overflow",
+        "Native workbench has no horizontal overflow at 320px",
+        "Viewing, themes, history, previews, export and reload issue no extra model requests",
+        "Actual host and final plugin have no JavaScript page errors"
+      ],
+      "themes": [
+        {
+          "name": "warm-soft",
+          "hostTokens": {
+            "color-bg-layout": "#F4F0E5",
+            "color-bg-container": "#FBF7EC",
+            "color-primary": "#A94635",
+            "font-size": "13px",
+            "border-radius": "13px",
+            "control-height": "38px"
+          },
+          "pluginTokens": {
+            "color-bg-layout": "#F4F0E5",
+            "color-bg-container": "#FBF7EC",
+            "color-primary": "#A94635",
+            "font-size": "13px",
+            "border-radius": "13px",
+            "control-height": "38px"
+          }
+        },
+        {
+          "name": "dark",
+          "hostTokens": {
+            "color-bg-layout": "#0B111C",
+            "color-bg-container": "#111A29",
+            "color-primary": "#5983F4",
+            "font-size": "13px",
+            "border-radius": "8px",
+            "control-height": "38px"
+          },
+          "pluginTokens": {
+            "color-bg-layout": "#0B111C",
+            "color-bg-container": "#111A29",
+            "color-primary": "#5983F4",
+            "font-size": "13px",
+            "border-radius": "8px",
+            "control-height": "38px"
+          }
+        },
+        {
+          "name": "custom",
+          "hostTokens": {
+            "color-bg-layout": "#0C111C",
+            "color-bg-container": "#141927",
+            "color-primary": "#8A3EC4",
+            "font-size": "15px",
+            "border-radius": "14px",
+            "control-height": "44px"
+          },
+          "pluginTokens": {
+            "color-bg-layout": "#0C111C",
+            "color-bg-container": "#141927",
+            "color-primary": "#8A3EC4",
+            "font-size": "15px",
+            "border-radius": "14px",
+            "control-height": "44px"
+          }
+        },
+        {
+          "name": "warm-soft",
+          "hostTokens": {
+            "color-bg-layout": "#F4F0E5",
+            "color-bg-container": "#FBF7EC",
+            "color-primary": "#A94635",
+            "font-size": "13px",
+            "border-radius": "13px",
+            "control-height": "38px"
+          },
+          "pluginTokens": {
+            "color-bg-layout": "#F4F0E5",
+            "color-bg-container": "#FBF7EC",
+            "color-primary": "#A94635",
+            "font-size": "13px",
+            "border-radius": "13px",
+            "control-height": "38px"
+          }
+        }
+      ],
+      "controlledUiCalls": 6,
+      "realModelRequests": 0,
+      "javascriptErrors": []
+    },
+    {
+      "hostVersion": "3.44.0",
+      "archiveSha256": "545d20933f6a622666bc1e01484181cad9e0141534d450e209505eb2d9cd93e0",
+      "checks": [
+        "Browser verification starts only after controlled business tasks are quiescent",
+        "Native opaque iframe preserves private drafts without Web Storage",
+        "Declared font resources load in the actual host",
+        "Key search narrows to the selected account-independent client Key",
+        "Unique Key selection shows its readable name without internal ID clutter",
+        "Account sidebar is at least 18rem wide in the native desktop frame",
+        "Long email has an intact full label and a single readable line",
+        "Host accepts warm-soft theme through its own store",
+        "Actual iframe inherits host theme tokens for warm-soft",
+        "Native help popover has padding and wrapped content",
+        "UI completion is correlated with the newly created batch ID and all six durable tasks",
+        "Two-account repeated-candy UI run sends exactly six controlled requests",
+        "Frozen batch uses the stable ID chosen in the Key selector",
+        "Result panel and close button fit the actual host viewport height",
+        "Actual final-archive Markdown renders emphasis, tables and inline/display MathML",
+        "Original answers and attempts are directly displayed outside disclosure widgets",
+        "Request facts, IDs, prompts and instructions are directly displayed",
+        "Repeat selectors use short verdict labels without raw Markdown",
+        "Raw response and copy fallback preserve the exact original Markdown and math delimiters",
+        "Diagnostics retain all original repeated responses in the native clipboard fallback",
+        "Host accepts dark theme through its own store",
+        "Actual iframe inherits host theme tokens for dark",
+        "Host accepts custom theme through its own store",
+        "Actual iframe inherits host theme tokens for custom",
+        "Customized host control height reaches the embedded official controls",
+        "Host accepts warm-soft theme through its own store",
+        "Actual iframe inherits host theme tokens for warm-soft",
+        "Result close returns focus to the original account row",
+        "History modal preserves filters and returns to the original list",
+        "Escape closes the artwork preview and leaves its parent result dialog open",
+        "Close button stays in the visible 390px host viewport",
+        "Actual result dialog fits 390px host viewport without horizontal overflow",
+        "Native workbench has no horizontal overflow at 390px",
+        "Close button stays in the visible 320px host viewport",
+        "Actual result dialog fits 320px host viewport without horizontal overflow",
+        "Native workbench has no horizontal overflow at 320px",
+        "Viewing, themes, history, previews, export and reload issue no extra model requests",
+        "Actual host and final plugin have no JavaScript page errors"
+      ],
+      "themes": [
+        {
+          "name": "warm-soft",
+          "hostTokens": {
+            "color-bg-layout": "#F4F0E5",
+            "color-bg-container": "#FBF7EC",
+            "color-primary": "#A94635",
+            "font-size": "13px",
+            "border-radius": "8px",
+            "control-height": "38px"
+          },
+          "pluginTokens": {
+            "color-bg-layout": "#F4F0E5",
+            "color-bg-container": "#FBF7EC",
+            "color-primary": "#A94635",
+            "font-size": "13px",
+            "border-radius": "8px",
+            "control-height": "38px"
+          }
+        },
+        {
+          "name": "dark",
+          "hostTokens": {
+            "color-bg-layout": "#0B111C",
+            "color-bg-container": "#111A29",
+            "color-primary": "#5983F4",
+            "font-size": "13px",
+            "border-radius": "8px",
+            "control-height": "38px"
+          },
+          "pluginTokens": {
+            "color-bg-layout": "#0B111C",
+            "color-bg-container": "#111A29",
+            "color-primary": "#5983F4",
+            "font-size": "13px",
+            "border-radius": "8px",
+            "control-height": "38px"
+          }
+        },
+        {
+          "name": "custom",
+          "hostTokens": {
+            "color-bg-layout": "#0C111C",
+            "color-bg-container": "#141927",
+            "color-primary": "#8A3EC4",
+            "font-size": "15px",
+            "border-radius": "14px",
+            "control-height": "44px"
+          },
+          "pluginTokens": {
+            "color-bg-layout": "#0C111C",
+            "color-bg-container": "#141927",
+            "color-primary": "#8A3EC4",
+            "font-size": "15px",
+            "border-radius": "14px",
+            "control-height": "44px"
+          }
+        },
+        {
+          "name": "warm-soft",
+          "hostTokens": {
+            "color-bg-layout": "#F4F0E5",
+            "color-bg-container": "#FBF7EC",
+            "color-primary": "#A94635",
+            "font-size": "13px",
+            "border-radius": "8px",
+            "control-height": "38px"
+          },
+          "pluginTokens": {
+            "color-bg-layout": "#F4F0E5",
+            "color-bg-container": "#FBF7EC",
+            "color-primary": "#A94635",
+            "font-size": "13px",
+            "border-radius": "8px",
+            "control-height": "38px"
+          }
+        }
+      ],
+      "controlledUiCalls": 6,
+      "realModelRequests": 0,
+      "javascriptErrors": []
+    }
+  ]
+}

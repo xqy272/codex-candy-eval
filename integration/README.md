@@ -1,3 +1,28 @@
+# 1.4.1 原生 UI 修复与 CPR 3.44.0 验收
+
+仅使用临时本机 CPR、数据库和受控上游。准备已发布 1.4.0 与最终 1.4.1 归档、核验过的官方 3.43.1/3.44.0 发行目录；run_host.py 以 3.43.1 启动，并用 --matrix-cpr-dir 注册 3.44.0 为唯一目标。沿用下方数据库工具参数，不连接生产或真实模型。
+
+按顺序运行，每条成功结束后再运行下一条，不并行业务与浏览器检查：
+
+```bash
+python3 integration/native_client.py --baseline dist/cloudops.codex-candy-eval-1.4.0-x86_64-unknown-linux-gnu.tar.gz
+python3 integration/ui-fixes-native.py seed
+python3 integration/ui-fixes-native.py upgrade
+python3 integration/ui-fixes-native.py business 3.43.1
+node integration/ui-fixes-browser.mjs 3.43.1
+python3 integration/ui-fixes-native.py switch
+python3 integration/ui-fixes-native.py business 3.44.0
+node integration/ui-fixes-browser.mjs 3.44.0
+```
+
+seed 保留旧报告、重复批次、私有草稿和未知消费暂停样本；upgrade 在原实例换最终包并逐项核对。switch 保持同一数据库和安装实例，核对宿主升级后数据；business 在每个官方宿主上完成双账号三类测试。浏览器先检查无活动任务，再按新建批次 ID 等待六个持久任务完成，避免把旧总览的“全部完成”当成新批次完成。
+
+浏览器每宿主实际发起六次本机受控请求，验证 Markdown、受限 MathML、原文复制、答案/请求直显、Key 搜索及 ID、长邮箱、说明浮层、历史返回、深色/柔光/自定义主题和 390/320px。弹窗不仅核对横向宽度，也核对 panel 与关闭按钮没有超出宿主可见高度；iframe 内容可能比屏幕高，使用 --plugin-viewport-height。查看、导出、切换主题、放大和刷新后账本不得新增模型调用。
+
+报告和受控截图位于 .runtime/integration/ui141-{hostVersion}，原生业务证据在 ui141-native.json。只复制脱敏证据，不复制 control.json、数据库或原始请求头。结束时创建 .runtime/integration/stop，等 run_host.py 退出后运行 cleanup-ui.py；临时控制信息和四个监听必须清除。
+
+---
+
 # 1.4.0 官方 UI 与交互验收
 
 使用 run_host.py 创建全新临时 CPR 3.39.0，注册官方 3.43.1 为唯一 matrix 目标。核对旧 1.3.1 与最终 1.4.0 归档后依次执行：

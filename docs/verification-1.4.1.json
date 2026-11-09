@@ -1,0 +1,65 @@
+{
+  "observedAtUtc": "2026-11-09T09:53:08.678085+00:00",
+  "version": "1.4.1",
+  "baseCommit": "532da98a8b4dfa735d98de649300a893ea856702",
+  "archive": {
+    "archiveSha256": "545d20933f6a622666bc1e01484181cad9e0141534d450e209505eb2d9cd93e0",
+    "bytes": 6941460,
+    "files": 22,
+    "resources": 20,
+    "binarySha256": "3181dbdb20461e68a4c6224df1ce9ad8b9a9410fadf36e64c0e6e60957920123",
+    "maximumGlibc": "GLIBC_2.28",
+    "stateDeclarationsUnchanged": true,
+    "allDeclaredResourceBytesMatch": true,
+    "officialUi": {
+      "version": "0.9.1",
+      "archiveSha256": "5f219b1fce116b6a068b3e05bff680b72c0d12f55b6fc8323bfbb7d25276bcc5",
+      "lockIntegrityMatches": true
+    },
+    "pageTestsPassed": 34,
+    "declaredHostRange": ">=3.43.1, <3.45.0"
+  },
+  "rustTestsPassed": 37,
+  "rustFmt": true,
+  "allTargetsClippyWarningsDenied": true,
+  "fixedSourcesVerified": 92,
+  "frontendLockedOfflineInstallAndBuild": true,
+  "uiTestsPassed": 34,
+  "nativeBusinessChecksPassed": 9,
+  "nativeUiChecksPassed": {
+    "3.43.1": 40,
+    "3.44.0": 38
+  },
+  "nativeHosts": [
+    {
+      "version": "3.43.1",
+      "binarySha256": "2e23385b35db58e30d09cc82fcf8541eb6620f82226dcb4a31680707902fb5c8"
+    },
+    {
+      "version": "3.44.0",
+      "binarySha256": "92e400640c292722232ce5aa0e7f0c8e69bc154437654f7d1585515d0114339f"
+    }
+  ],
+  "controlledRequestsFinalEnvironment": 40,
+  "realModelRequests": 0,
+  "productionInspected": false,
+  "productionModified": false,
+  "productionVersionReportedByUser": {
+    "version": "3.44.0",
+    "date": "2026-11-09",
+    "independentlyReinspected": false
+  },
+  "evidence": [
+    "native-ui-business-1.4.1.json",
+    "native-ui-1.4.1.json",
+    "final-audit-1.4.1.json",
+    "credentials-cleanup-1.4.1.json"
+  ],
+  "limits": [
+    "Only the official 3.43.1 and 3.44.0 hosts were run, not every patch in the declared range.",
+    "Controlled fixtures establish persistence, execution and UI behavior, not model identity accuracy.",
+    "Source/raw copy and grading retain original responses; reading-only formatting repairs never modify storage.",
+    "Development candidates were discarded. This evidence covers a fresh database with the exact final archive only.",
+    "No production plugin installation, production theme change or real model request was performed."
+  ]
+}

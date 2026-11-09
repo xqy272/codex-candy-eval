@@ -1,0 +1,26 @@
+{
+  "checks": [
+    "Released 1.4.0 on official CPR 3.43.1 seeded with history, repeated batch, draft and unknown-consumption sample",
+    "Same-instance 1.4.0 -> 1.4.1 preserves every state declaration, collection, private draft and stored answer on CPR 3.43.1",
+    "Final archive completes two-account candy on official CPR 3.43.1",
+    "Final archive completes two-account fingerprint on official CPR 3.43.1",
+    "Final archive completes two-account pelican on official CPR 3.43.1",
+    "Official CPR 3.43.1 -> 3.44.0 preserves final plugin instance, state and unknown-consumption pause without replay",
+    "Final archive completes two-account candy on official CPR 3.44.0",
+    "Final archive completes two-account fingerprint on official CPR 3.44.0",
+    "Final archive completes two-account pelican on official CPR 3.44.0"
+  ],
+  "realModelRequests": 0,
+  "hosts": [
+    {
+      "version": "3.43.1",
+      "binarySha256": "2e23385b35db58e30d09cc82fcf8541eb6620f82226dcb4a31680707902fb5c8"
+    },
+    {
+      "version": "3.44.0",
+      "binarySha256": "92e400640c292722232ce5aa0e7f0c8e69bc154437654f7d1585515d0114339f"
+    }
+  ],
+  "observedAtUtc": "2026-11-09T09:52:04.898097+00:00",
+  "archiveSha256": "545d20933f6a622666bc1e01484181cad9e0141534d450e209505eb2d9cd93e0"
+}

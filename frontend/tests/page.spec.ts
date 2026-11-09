@@ -31,6 +31,9 @@ async function mock(
     uncertain?: boolean
     opaque?: boolean
     conflict?: boolean
+    responseText?: string
+    keys?: { id: string; name: string; enabled: boolean }[]
+    soft?: boolean
     accounts?: { account_id: string; name: string; email: string | null; enabled: boolean }[]
   } = {},
 ) {
@@ -85,7 +88,7 @@ async function mock(
                       { account_id: 'a2', name: '测试账号 B', enabled: true },
                       { account_id: 'a3', name: '停用账号', enabled: false },
                     ]),
-                keys: o.empty ? [] : [{ id: 'k1', name: 'personal-codex', enabled: true }],
+                keys: o.empty ? [] : (o.keys ?? [{ id: 'k1', name: 'personal-codex', enabled: true }]),
               })
             case 'api/models':
               return encode({ models: ['gpt-test', 'other-model'] })
@@ -191,7 +194,7 @@ async function mock(
                     ? '<html><body>旧版动画原文</body></html>'
                     : '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><defs><linearGradient id="paint"><stop stop-color="#e6edf4"/></linearGradient></defs><rect width="360" height="200" fill="url(#paint)"/><text x="20" y="90">Pelican</text><script>parent.__unsafe=true</script><image href="https://example.invalid/leak"/></svg>'
                   : r.kind === 'candy'
-                    ? '22'
+                    ? o.responseText ?? '22'
                     : '1, 2, 3'
               return encode({
                 sample: {
@@ -243,7 +246,7 @@ async function mock(
         },
       },
     })
-  }, { ...options, themeVars: createThemeVars(createTheme({ scheme: options.dark ? 'dark' : 'light' }).tokens) })
+  }, { ...options, themeVars: createThemeVars(createTheme({ scheme: options.dark ? 'dark' : 'light', preset: options.soft ? 'soft' : 'default' }).tokens) })
 }
 async function choose(page: Page, name: string, option: string) {
   await page.getByRole('combobox', { name, exact: true }).click()
@@ -271,6 +274,7 @@ const start = (page: Page) => page.getByRole('button', { name: /^(开始检测|�
 const calls = (page: Page) => page.evaluate(() => (window as any).__requests)
 const submissions = async (page: Page) => (await calls(page)).filter((r: any) => r.path === 'api/batch-submit')
 const openAccount = (page: Page, name = '测试账号 A') => page.locator('.desktop-results').getByRole('button', { name: '查看 ' + name + ' 结果', exact: true }).click()
+const closeResult = (page: Page) => page.getByRole('button', { name: '关闭结果', exact: true }).click()
 
 test('official components keep all request fields visible and explain readiness', async ({ page }) => {
   await mock(page)
@@ -289,9 +293,10 @@ test('opaque host storage restores drafts and completed single-account results w
   await mock(page, { opaque: true })
   await prepare(page, '糖果题')
   await start(page)
-  await expect(page.locator('.big-answer')).toHaveText('22')
+  await expect(page.getByLabel('实际回答', { exact: true })).toContainText('22')
   await page.reload()
-  await expect(page.locator('.big-answer')).toHaveText('22')
+  await openAccount(page)
+  await expect(page.getByLabel('实际回答', { exact: true })).toContainText('22')
   await expect(page.getByRole('combobox', { name: '模型', exact: true })).toContainText('gpt-test')
   expect(await submissions(page)).toHaveLength(0)
 })
@@ -341,6 +346,7 @@ test('blank account names retain email and stable-ID fallback with original enab
   await expect(page.locator('.result-heading h2')).toHaveText('mailbox@example.invalid')
   expect((await submissions(page))[0].data.accountIds).toEqual(['email-only'])
   await page.reload()
+  await openAccount(page, 'mailbox@example.invalid')
   await expect(page.locator('.result-heading h2')).toHaveText('mailbox@example.invalid')
 })
 
@@ -354,7 +360,7 @@ test('multi-account repeats open an overview, detail returns focus to the same r
   await openAccount(page)
   await expect(page.locator('.big-answer')).toHaveText('0 / 3')
   await expect(page.getByLabel('每次回答').getByRole('button')).toHaveCount(3)
-  await page.getByRole('button', { name: '返回本批次', exact: true }).click()
+  await closeResult(page)
   await expect(page.locator('.desktop-results').getByRole('button', { name: '查看 测试账号 A 结果', exact: true })).toBeFocused()
   const c = await submissions(page)
   expect(c).toHaveLength(1)
@@ -366,7 +372,8 @@ test('single candy displays the actual wrong answer with error semantics', async
   await mock(page)
   await prepare(page, '糖果题')
   await start(page)
-  await expect(page.locator('.big-answer')).toHaveText('22')
+  await expect(page.locator('.big-answer')).toHaveText('0 / 1')
+  await expect(page.getByLabel('实际回答', { exact: true })).toContainText('22')
   await expect(page.locator('.result-state')).toContainText('答错')
   expect(await page.locator('.result-state').evaluate(e => getComputedStyle(e).color)).not.toBe('')
 })
@@ -419,16 +426,18 @@ test('history details return to the filtered list without replacing test drafts'
   await mock(page)
   await prepare(page)
   await start(page)
+  await closeResult(page)
   await choose(page, '模型', 'other-model')
   await navigate(page, '记录')
   await choose(page, '筛选测试', '模型指纹')
   await page.locator('.history-table').getByRole('button', { name: '查看结果' }).click()
   await expect(page.locator('.ranking')).toBeVisible()
-  await page.getByRole('button', { name: '返回记录' }).click()
+  await closeResult(page)
   await expect(page.getByRole('combobox', { name: '筛选测试', exact: true })).toContainText('模型指纹')
   await expect(page.locator('.history-table').getByRole('button', { name: '查看结果' })).toBeFocused()
   await navigate(page, '测试')
   await expect(page.getByRole('combobox', { name: '模型', exact: true })).toContainText('other-model')
+  await openAccount(page)
   await expect(page.locator('.result-heading')).toContainText('gpt-test')
 })
 
@@ -436,6 +445,7 @@ test('execution and result filters match batches independently', async ({ page }
   await mock(page)
   await prepare(page, '糖果题')
   await start(page)
+  await closeResult(page)
   await navigate(page, '记录')
   await choose(page, '筛选状态', '全部完成')
   await choose(page, '筛选结果', '糖果答错')
@@ -501,7 +511,7 @@ test('third comparison requires explicit replacement and cancel preserves A/B', 
   for (let i = 1; i <= 3; i++) {
     await openAccount(page, '作品账号 ' + i)
     await page.getByRole('button', { name: '加入作品对比' }).click()
-    if (i < 3) await page.getByRole('button', { name: '返回本批次' }).click()
+    if (i < 3) await closeResult(page)
   }
   await expect(page.getByRole('dialog', { name: '替换哪一份作品' })).toBeVisible()
   await expect(page.getByAltText('对比中的鹈鹕作品')).toHaveCount(2)
@@ -574,10 +584,10 @@ test('synchronization errors retain results and recover without model requests',
   await mock(page)
   await prepare(page, '糖果题')
   await start(page)
-  await expect(page.locator('.big-answer')).toHaveText('22')
+  await expect(page.getByLabel('实际回答', { exact: true })).toContainText('22')
   await page.evaluate(() => { (window as any).__fixture.failPoll = true })
   await expect(page.getByText('同步未完成，已保存结果仍保留', { exact: false })).toBeVisible()
-  await expect(page.locator('.big-answer')).toHaveText('22')
+  await expect(page.getByLabel('实际回答', { exact: true })).toContainText('22')
   await page.evaluate(() => { (window as any).__fixture.failPoll = false })
   await page.getByRole('button', { name: '重新读取' }).click()
   await expect(page.getByRole('button', { name: '重新读取' })).toHaveCount(0)
@@ -591,7 +601,7 @@ test('readable summary and complete debug export have separate clipboard fallbac
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(Error('denied')) } }))
   await page.getByRole('button', { name: '复制结果', exact: true }).click()
   await expect(page.getByLabel('可选中复制的结果文本')).toHaveValue(/参考库候选/)
-  await page.getByText('原始回答与请求详情', { exact: true }).click()
+  await page.getByText('完整诊断数据', { exact: true }).click()
   await page.getByRole('button', { name: '复制调试 JSON', exact: true }).click()
   const value = JSON.parse(await page.getByLabel('可选中复制的结果文本').inputValue())
   expect(value[0].samples).toHaveLength(3)
@@ -624,4 +634,161 @@ test('official segmented controls support arrow keys', async ({ page }) => {
   await page.keyboard.press('ArrowRight')
   await expect(tabs.getByRole('radio', { name: '画鹈鹕', exact: true })).toBeChecked()
   await expect(page.getByRole('combobox', { name: '绘图题目', exact: true })).toBeVisible()
+})
+
+test('help popovers have readable padding and stay inside narrow and wide viewports', async ({ page }) => {
+  await mock(page, { soft: true })
+  await page.goto('/')
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 })
+    for (const [button, label] of [['额度说明', '额度说明内容'], ['保留规则', '保留规则说明']]) {
+      const trigger = page.getByRole('button', { name: button, exact: true })
+      await trigger.click()
+      const content = page.getByLabel(label, { exact: true })
+      await expect(content).toBeVisible()
+      const bounds = await content.boundingBox()
+      expect(bounds!.x).toBeGreaterThanOrEqual(0)
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1)
+      expect(await content.evaluate(e => parseFloat(getComputedStyle(e).paddingLeft))).toBeGreaterThanOrEqual(12)
+      expect(await content.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true)
+      await page.keyboard.press('Escape')
+      await expect(content).not.toBeVisible()
+      await expect(trigger).toBeFocused()
+    }
+  }
+  expect(await submissions(page)).toHaveLength(0)
+})
+
+test('Markdown, math, tables and code render directly while raw copy stays byte-identical', async ({ page }) => {
+  const text = '**最少取出 \\(21\\) 颗。 ** 这里利用题目条件\n\n### 推导\n\n- 五角星糖果\n- 圆形糖果\n\n| 形状 | 数量 |\n| --- | --- |\n| 圆形 | 21 |\n\n\\[6+4=10\\]\n\n```text\n**literal ** \\(code\\)\n```\n\n<script>window.__unsafe=true</script>\n[unsafe](javascript:alert(1))'
+  await mock(page, { responseText: text })
+  await prepare(page, '糖果题')
+  await start(page)
+  const dialog = page.getByRole('dialog', { name: '检测结果', exact: true })
+  await expect(dialog).toBeVisible()
+  const answer = dialog.getByLabel('实际回答', { exact: true })
+  await expect(answer.locator('.answer-markdown strong')).toContainText('最少取出')
+  await expect(answer.locator('.answer-markdown h3')).toHaveText('推导')
+  await expect(answer.locator('.answer-markdown table')).toBeVisible()
+  await expect(answer.locator('.answer-markdown math')).toHaveCount(2)
+  await expect(answer.locator('.answer-markdown pre code')).toHaveText('**literal ** \\(code\\)\n')
+  expect(await page.evaluate(() => (window as any).__unsafe)).toBeUndefined()
+  await expect(answer.locator('a[href^="javascript:"]')).toHaveCount(0)
+  expect(await answer.evaluate(e => !!e.closest('details'))).toBe(false)
+  const facts = dialog.getByLabel('请求详情', { exact: true })
+  await expect(facts.getByRole('heading', { name: '请求详情', exact: true })).toBeVisible()
+  await expect(facts).toContainText('冻结测试题')
+  expect(await facts.evaluate(e => !!e.closest('details'))).toBe(false)
+  await answer.getByRole('radio', { name: '原文', exact: true }).click()
+  expect(await answer.locator('.answer-source').textContent()).toBe(text)
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(Error('denied')) } }))
+  await answer.getByRole('button', { name: '复制尝试 1 回答', exact: true }).click()
+  await expect(dialog.getByLabel('可选中复制的结果文本')).toHaveValue(text)
+  expect(await submissions(page)).toHaveLength(1)
+})
+
+test('repeat selectors show verdicts and keep the selected response visible across polling', async ({ page }) => {
+  await mock(page, { responseText: '**21**\n\n### 完整解释\n\n正文' })
+  await prepare(page, '糖果题', true)
+  await choose(page, '每账号次数', '3 次')
+  await start(page)
+  await openAccount(page)
+  const selector = page.getByLabel('每次回答', { exact: true })
+  expect(await selector.innerText()).not.toMatch(/\*\*|###|完整解释/)
+  await selector.getByRole('button', { name: /^第 2 次/ }).click()
+  await expect(page.getByLabel('实际回答', { exact: true }).getByRole('heading').first()).toContainText('第 2 次')
+  await expect(page.locator('.answer-markdown h3')).toHaveText('完整解释')
+  await page.waitForTimeout(1400)
+  await expect(selector.getByRole('button', { name: /^第 2 次/ })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByLabel('请求详情', { exact: true })).toContainText('冻结测试题')
+  expect(await submissions(page)).toHaveLength(1)
+})
+
+test('long email identities have a wider sidebar and remain selectable through scrolling', async ({ page }) => {
+  const accounts = Array.from({ length: 18 }, (_, i) => ({ account_id: 'long-' + i, name: '', email: 'fictional.long.mailbox.' + i + '@example.invalid', enabled: i !== 17 }))
+  await mock(page, { accounts })
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.goto('/')
+  const sidebar = page.getByLabel('下一次检测账号', { exact: true })
+  expect((await sidebar.boundingBox())!.width).toBeGreaterThanOrEqual(288)
+  const identity = page.locator('.account-row strong').first()
+  await expect(identity).toHaveAttribute('title', accounts[0]!.email)
+  expect(await identity.evaluate(e => e.clientHeight <= parseFloat(getComputedStyle(e).lineHeight) + 1)).toBe(true)
+  const last = page.getByLabel('选择 ' + accounts[16]!.email, { exact: true })
+  await last.locator('..').click()
+  await expect(last).toBeChecked()
+  await expect(page.getByLabel('选择 ' + accounts[17]!.email, { exact: true })).toBeDisabled()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+
+test('one available Key still uses a full searchable selector', async ({ page }) => {
+  await mock(page)
+  await page.goto('/')
+  const key = page.getByRole('combobox', { name: '客户端 Key', exact: true })
+  await expect(key).toContainText('personal-codex')
+  await expect(key).not.toContainText('k1')
+  expect((await key.boundingBox())!.height).toBeGreaterThanOrEqual(30)
+  await key.click()
+  await page.getByRole('combobox', { name: '搜索选项', exact: true }).fill('personal')
+  await expect(page.getByRole('option')).toHaveCount(1)
+  await page.getByRole('option').click()
+  expect(await submissions(page)).toHaveLength(0)
+})
+
+test('Key search excludes disabled keys and sends only the selected stable ID', async ({ page }) => {
+  await mock(page, { keys: [
+    { id: 'key-alpha', name: '同名 Key', enabled: true },
+    { id: 'key-beta', name: '同名 Key', enabled: true },
+    { id: 'key-disabled', name: '已禁用 Key', enabled: false },
+  ] })
+  await page.goto('/')
+  await page.getByRole('combobox', { name: '客户端 Key', exact: true }).click()
+  await expect(page.getByRole('option')).toHaveCount(2)
+  await page.getByRole('combobox', { name: '搜索选项', exact: true }).fill('key-beta')
+  await expect(page.getByRole('option')).toHaveCount(1)
+  await expect(page.getByRole('option')).toContainText('key-beta')
+  await page.getByRole('option').click()
+  await choose(page, '模型', 'gpt-test')
+  await selectAccount(page, '测试账号 A')
+  await start(page)
+  expect((await submissions(page))[0].data.clientKeyId).toBe('key-beta')
+  expect((await calls(page)).filter((r: any) => r.path === 'api/models').at(-1).data.clientKeyId).toBe('key-beta')
+})
+
+test('result dialogs fit 320px and Escape closes only the top artwork dialog', async ({ page }) => {
+  await mock(page)
+  await prepare(page, '画鹈鹕')
+  await start(page)
+  const result = page.getByRole('dialog', { name: '检测结果', exact: true })
+  await page.getByRole('button', { name: '放大查看' }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: '作品预览' })).not.toBeVisible()
+  await expect(result).toBeVisible()
+  await page.setViewportSize({ width: 320, height: 844 })
+  const box = await result.boundingBox()
+  expect(box!.x).toBeGreaterThanOrEqual(0)
+  expect(box!.x + box!.width).toBeLessThanOrEqual(321)
+  expect(await result.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true)
+  await page.keyboard.press('Escape')
+  await expect(result).not.toBeVisible()
+  await expect(page.getByLabel('本批次总览', { exact: true })).toBeVisible()
+  expect(await submissions(page)).toHaveLength(1)
+})
+
+test('dialog footer stays in the visible host viewport when the iframe is taller', async ({ page }) => {
+  await mock(page)
+  await prepare(page, '糖果题')
+  await start(page)
+  const result = page.getByRole('dialog', { name: '检测结果', exact: true })
+  for (const height of [520, 380]) {
+    await page.evaluate(value => document.documentElement.style.setProperty('--plugin-viewport-height', value + 'px'), height)
+    const box = await result.boundingBox()
+    const footer = await result.getByRole('button', { name: '关闭结果', exact: true }).boundingBox()
+    expect(box!.y).toBeGreaterThanOrEqual(0)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(height)
+    expect(footer!.y + footer!.height).toBeLessThanOrEqual(height)
+    await expect(result.getByRole('button', { name: '关闭结果', exact: true })).toBeInViewport()
+  }
+  await closeResult(page)
+  expect(await submissions(page)).toHaveLength(1)
 })

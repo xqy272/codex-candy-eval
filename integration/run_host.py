@@ -2,6 +2,26 @@
 from pathlib import Path
 import http.server,threading,json,secrets,subprocess,os,time,urllib.request,signal,uuid,re,sys,argparse,tempfile,shutil,socket
 ROOT=Path(__file__).resolve().parents[1]
+MARKDOWN_FIXTURE = r'''**最少取出 \(21\) 颗。 ** 这里利用了题目给出的条件，可以凭手感辨别形状
+
+### 推导过程
+
+- 五角星糖果先取 12 颗
+- 圆形糖果再取 9 颗
+
+| 形状 | 数量 |
+| --- | --- |
+| 五角星 | 12 |
+| 圆形 | 9 |
+
+\[12+9=21\]
+
+```text
+**代码保留原样 ** \(literal\)
+```
+
+这是本机受控验收回答，不是真实模型结果
+'''
 parser=argparse.ArgumentParser(description='启动完全隔离的 CPR 插件业务验证环境，仅调用受控上游')
 parser.add_argument('--cpr-dir',type=Path,required=True)
 parser.add_argument('--postgres-bin',type=Path,required=True)
@@ -53,7 +73,7 @@ class Mock(http.server.BaseHTTPRequestHandler):
                 self.observation["end"]=time.monotonic();type(self).active-=1;self.per_account[alias]-=1
     def log_message(self,*args):pass
     def do_GET(self):
-        data=json.dumps({'object':'list','data':[{'id':n,'object':'model','owned_by':'fixture'}for n in ['eval-candy','eval-fp','eval-pelican','eval-pelican-slow','eval-pelican-resume','eval-error','eval-incomplete','eval-slow','eval-large','eval-batch','eval-partial']]}).encode()
+        data=json.dumps({'object':'list','data':[{'id':n,'object':'model','owned_by':'fixture'}for n in ['eval-candy','eval-markdown','eval-fp','eval-pelican','eval-pelican-slow','eval-pelican-resume','eval-error','eval-incomplete','eval-slow','eval-large','eval-batch','eval-partial']]}).encode()
         self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',len(data));self.end_headers();self.wfile.write(data)
     def respond(self):
         body=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))))
@@ -64,7 +84,7 @@ class Mock(http.server.BaseHTTPRequestHandler):
         if model=='eval-error':
             data=json.dumps({'error':{'message':'Isolated fixture failure','type':'invalid_request_error','code':'fixture_error'}}).encode()
             self.send_response(400);self.send_header('Content-Type','application/json');self.send_header('Content-Length',len(data));self.end_headers();self.wfile.write(data);return
-        text='21'
+        text=MARKDOWN_FIXTURE if model=='eval-markdown' else '21'
         if model in ['eval-pelican','eval-pelican-slow','eval-pelican-resume']:text='```html\n<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><rect width="360" height="200" fill="#eef5ff"/><circle cx="90" cy="150" r="30" fill="none" stroke="#246"/><circle cx="240" cy="150" r="30" fill="none" stroke="#246"/><text x="90" y="70">Pelican test fixture</text></svg>\n```'
         if model in ['eval-fp','eval-partial']:
             fixtures=json.loads((ROOT/'backend/tests/fixtures/fingerprint.json').read_text())
@@ -132,7 +152,7 @@ try:
     app=spawn([CPR/'codex-proxy-rs'],'app.log')
     try:wait_url('http://127.0.0.1:18380/healthz')
     except Exception:
-        print((RUNTIME/'app.log').read_text(errors='replace')[-4500:]);raise
+        print((RUNTIME/'app.log').read_text(errors='replace').replace(password, '[REDACTED]')[-4500:]);raise
     control={'root':str(RUNTIME),'username':'eval-admin','password':password,'base':'http://127.0.0.1:18380'}
     (WORK/'control.json').write_text(json.dumps(control));(WORK/'control.json').chmod(0o600)
     control_written=True

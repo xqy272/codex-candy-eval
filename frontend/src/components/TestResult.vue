@@ -5,7 +5,8 @@ import type { RecordEntry } from '../api'
 import { active, duration, label, phases, profiles, reasons, recordTone } from '../presentation'
 import { download } from '../media'
 import ArtworkView from './ArtworkView.vue'
-const props = defineProps<{ records: RecordEntry[]; accountLabel: string; clock: number; readonly?: boolean; busy?: boolean }>()
+import AnswerBody from './AnswerBody.vue'
+const props = defineProps<{ records: RecordEntry[]; accountLabel: string; clock: number; readonly?: boolean; busy?: boolean; clientKey?: string }>()
 const emit = defineEmits<{ action: [name: 'resume' | 'stop', r: RecordEntry]; compare: [r: RecordEntry] }>()
 const current = computed(() => props.records[0])
 const liveRecord = computed(() => props.records.find(active))
@@ -16,11 +17,7 @@ const correctCandy = computed(() => validCandy.value.filter((r) => r.verdict ===
 const failedCandy = computed(() => props.records.filter((r) => ['paused', 'failed', 'unscorable', 'partial', 'interrupted', 'cancelled'].includes(r.status)).length)
 const stoppedCandy = computed(() => props.records.filter((r) => r.status === 'stopped').length)
 const answer = (r: RecordEntry) => r.samples.find((s) => s.valid !== false && s.status === 'completed')?.answer?.text ?? r.samples.at(-1)?.answer?.text ?? ''
-const shortAnswer = (r: RecordEntry) => {
-  if (!['completed', 'correct', 'wrong'].includes(r.status)) return label(r)
-  const text = answer(r).trim()
-  return text ? text.length > 60 ? text.slice(0, 60) + '…' : text : '—'
-}
+const inspected = computed(() => props.records.find((r) => r.id === candyExpanded.value) ?? current.value)
 const total = computed(() => props.records.flatMap((r) => r.samples).reduce((sum, s) => {
   for (const [k, v] of Object.entries(s.answer?.usage ?? {})) if (typeof v === 'number') sum[k] = (sum[k] ?? 0) + v
   return sum
@@ -97,37 +94,51 @@ function exportSummary() {
       </template>
       <template v-if="current.kind === 'candy'">
         <div class="candy-summary">
-          <div><p class="muted">{{ records.length > 1 ? '答对 / 有效回答' : '实际回答' }}</p><h3 class="big-answer">{{ records.length > 1 ? correctCandy + ' / ' + validCandy.length : shortAnswer(current) }}</h3><p class="muted">有效 {{ validCandy.length }} 次 · 未完成 {{ failedCandy }} 次<span v-if="stoppedCandy"> · 已停止 {{ stoppedCandy }} 次</span></p></div>
+          <div><p class="muted">答对 / 有效回答</p><h3 class="big-answer">{{ correctCandy }} / {{ validCandy.length }}</h3><p class="muted">有效 {{ validCandy.length }} 次 · 未完成 {{ failedCandy }} 次<span v-if="stoppedCandy"> · 已停止 {{ stoppedCandy }} 次</span></p></div>
           <div class="answer-key"><small>标准答案</small><strong>21</strong></div>
         </div>
-        <div class="candy-answers" aria-label="每次回答">
+        <div v-if="records.length > 1" class="candy-answers" aria-label="每次回答">
           <ZButton v-for="(r, i) in records" :key="r.id" :type="r.verdict === 'correct' || r.status === 'correct' ? 'success' : r.verdict === 'wrong' || r.status === 'wrong' ? 'danger' : 'default'"
-            :aria-pressed="candyExpanded === r.id" @click="candyExpanded = candyExpanded === r.id ? '' : r.id">第 {{ i + 1 }} 次 · {{ shortAnswer(r) }}</ZButton>
-        </div>
-        <div v-for="r in records.filter((r) => r.id === candyExpanded)" :key="r.id" class="sample">
-          <p>{{ label(r) }}</p><pre>{{ answer(r) || '暂无完整回答' }}</pre>
-          <ZButton v-if="records.length > 1 && r.canResume && !readonly" :disabled="busy" @click="retry(r)">{{ retryConfirm === r.id ? '确认补测，可能再次消耗额度' : retryText(r) }}</ZButton>
+            :aria-pressed="inspected?.id === r.id" @click="candyExpanded = r.id">第 {{ i + 1 }} 次 · {{ label(r) }}</ZButton>
         </div>
       </template>
-      <ArtworkView v-if="current.kind === 'pelican'" :record="current" @copy="copy" @compare="emit('compare', $event)" />
+      <ArtworkView v-if="current.kind === 'pelican'" :record="current" @copy="copy" @compare="emit('compare', $event); notice = '已选择作品，关闭结果后查看对比'" />
       <div v-if="!readonly" class="actions">
-        <ZButton v-if="current.canResume" type="primary" :disabled="busy" @click="retry(current)">{{ retryConfirm === current.id ? '确认补测，可能再次消耗额度' : retryText(current) }}</ZButton>
+        <ZButton v-if="inspected?.canResume" type="primary" :disabled="busy" @click="retry(inspected)">{{ retryConfirm === inspected.id ? '确认补测，可能再次消耗额度' : retryText(inspected) }}</ZButton>
         <ZButton v-if="canStop" :disabled="busy || current.stopRequested" @click="emit('action', 'stop', current)">{{ current.stopRequested ? '正在停止' : current.batchId ? '停止此账号' : '停止此检测' }}</ZButton>
         <span v-if="canStop && records.length > 1" class="muted">覆盖此账号尚未结束的全部次数</span>
       </div>
       <p v-if="current.canResume && current.reason !== 'scoring_failed'" class="muted">只补缺失或无效样本，此前请求可能已消耗额度</p>
-      <details class="evidence">
-        <summary>原始回答与请求详情</summary>
+      <section v-if="inspected" class="answer-evidence" aria-label="实际回答">
+        <h2>{{ current.kind === 'pelican' ? '原始回答' : '实际回答' }}<span v-if="records.length > 1" class="muted"> · 第 {{ records.indexOf(inspected) + 1 }} 次</span></h2>
+        <article v-for="(s, i) in inspected.samples" :key="i" class="sample">
+          <div class="sample-heading"><h2>尝试 {{ i + 1 }}<span v-if="current.kind === 'fingerprint'" class="muted"> · 样本 {{ (s.step ?? i) + 1 }}</span></h2><ZTag size="small" :type="s.valid === false ? 'warning' : s.status === 'completed' ? 'success' : 'default'">{{ s.valid === false ? '未作为有效结果' : s.status === 'completed' ? '完整完成' : '未完成' }} · {{ duration(s.durationMs) }}</ZTag></div>
+          <AnswerBody :source="s.answer?.text ?? ''" :code="current.kind === 'pelican'" :label="'尝试 ' + (i + 1) + ' 回答'" @copy="copy" />
+          <p v-if="s.error?.origin === 'plugin'" class="feedback warning">达到插件 {{ (s.error.timeoutMs ?? 0) / 1000 }} 秒等待上限，部分回答不参与判分</p>
+          <p v-else-if="s.error" class="feedback warning">{{ s.error.code }} · {{ s.error.kind ?? '未提供细分原因' }} · HTTP {{ s.error.httpStatus ?? '未知' }}</p>
+        </article>
+        <p v-if="!inspected.samples.length" class="muted">尚未保存回答，已接收的内容显示在执行进度中</p>
+      </section>
+      <section v-if="inspected" class="request-evidence" aria-label="请求详情">
+        <h2>请求详情</h2>
+        <dl class="request-facts">
+          <div><dt>模型</dt><dd>{{ current.model }}</dd></div>
+          <div><dt>推理强度</dt><dd>{{ current.effort || '默认强度' }}</dd></div>
+          <div><dt>请求语境</dt><dd>{{ profiles[current.requestProfile ?? 'simple-v1'] ?? current.requestProfile }}</dd></div>
+          <div><dt>客户端 Key</dt><dd>{{ clientKey || '旧版未记录' }}</dd></div>
+          <div><dt>累计耗时</dt><dd>{{ duration(records.reduce((sum, r) => sum + r.durationMs, 0)) }}</dd></div>
+        </dl>
         <p class="muted">检测时间 {{ new Date(current.startedAt).toLocaleString() }} · 插件 {{ current.pluginVersion ?? '旧版未记录' }} · 检测器 {{ current.detectorVersion }}</p>
         <p class="muted">Token：{{ Object.keys(total).length ? Object.entries(total).map(([k, v]) => k + ' ' + v).join(' · ') : '最终用量未提供，不能解释为零消耗' }}<span v-if="Object.keys(total).length && missingUsage"> · 部分请求用量未知</span></p>
-        <details v-for="(s, i) in current.samples" :key="i" class="sample">
-          <summary>尝试 {{ i + 1 }} · {{ s.valid === false ? '未作为有效结果' : s.status === 'completed' ? '完整完成' : '未完成' }} · {{ duration(s.durationMs) }}</summary>
-          <pre>{{ s.answer?.text || '未取得正文' }}</pre><p class="muted">请求 ID：{{ s.requestId ?? '未知' }}</p>
-          <p v-if="s.error?.origin === 'plugin'">达到插件 {{ (s.error.timeoutMs ?? 0) / 1000 }} 秒等待上限，部分回答不参与判分</p>
-          <p v-else-if="s.error" class="muted">{{ s.error.code }} · {{ s.error.kind ?? '未提供细分原因' }} · HTTP {{ s.error.httpStatus ?? '未知' }}</p>
-          <details><summary>题目与指令</summary><pre>{{ s.instructions + '\n' + s.prompt }}</pre></details>
-        </details>
-        <details><summary>冻结计划与版本依据</summary><pre>{{ JSON.stringify({ ...current, samples: undefined, progress: undefined }, null, 2) }}</pre></details>
+        <article v-for="(s, i) in inspected.samples" :key="i" class="sample request-sample">
+          <h2>尝试 {{ i + 1 }} 的请求</h2><p class="muted">请求 ID：{{ s.requestId ?? '未知' }}</p>
+          <div v-if="s.instructions"><h4>指令</h4><pre>{{ s.instructions }}</pre></div>
+          <div><h4>题目</h4><pre>{{ s.prompt || '旧版未记录' }}</pre></div>
+        </article>
+      </section>
+      <details class="evidence">
+        <summary>完整诊断数据</summary>
+        <pre>{{ JSON.stringify({ ...current, samples: undefined, progress: undefined }, null, 2) }}</pre>
         <div class="actions"><ZButton size="small" @click="download(JSON.stringify(records, null, 2), 'model-test-' + current.id + '.json', 'application/json')">导出调试 JSON</ZButton><ZButton size="small" @click="copy(JSON.stringify(records, null, 2))">复制调试 JSON</ZButton></div>
       </details>
       <div class="actions export-actions"><ZButton size="small" variant="text" @click="exportSummary">导出摘要</ZButton><ZButton size="small" variant="text" @click="copy(readableSummary())">复制结果</ZButton><span class="muted" role="status">{{ notice }}</span></div>
