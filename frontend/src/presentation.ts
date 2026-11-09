@@ -67,3 +67,62 @@ export function label(r: RecordEntry): string {
 export function active(r: RecordEntry) {
   return r.task && ['queued', 'running', 'scoring', 'deleting'].includes(r.status)
 }
+
+export function duration(ms: number) {
+  const seconds = Math.max(0, Math.floor(ms / 1000))
+  return seconds >= 60
+    ? Math.floor(seconds / 60) + ' 分 ' + (seconds % 60) + ' 秒'
+    : seconds + ' 秒'
+}
+
+export function verdict(r: RecordEntry) {
+  if (r.verdict) return r.verdict
+  if (r.status === 'correct') return 'correct'
+  if (r.status === 'wrong') return 'wrong'
+  if (r.kind === 'fingerprint' && r.attribution?.results.length) return 'ranked'
+  if (r.kind === 'pelican' && r.status === 'completed') return 'output'
+  return ''
+}
+
+export function executionState(r: RecordEntry) {
+  if (active(r)) return 'active'
+  if (r.status === 'paused') return 'paused'
+  if (['stopped', 'cancelled'].includes(r.status)) return 'stopped'
+  if (['completed', 'correct', 'wrong'].includes(r.status)) return 'completed'
+  return 'failed'
+}
+
+export function recordTone(r: RecordEntry): 'success' | 'warning' | 'danger' | 'info' | 'default' {
+  if (active(r)) return 'info'
+  if (r.status === 'paused') return 'warning'
+  if (verdict(r) === 'wrong' || ['failed', 'partial', 'interrupted', 'unscorable'].includes(r.status))
+    return 'danger'
+  if (executionState(r) === 'completed') return 'success'
+  return 'default'
+}
+
+export const phases: Record<string, string> = {
+  requesting: '正在请求',
+  waiting_events: '等待响应事件',
+  receiving_events: '正在接收事件',
+  receiving_text: '正在接收正文',
+}
+
+export const executionOptions = [
+  { label: '全部状态', value: '' },
+  { label: '检测中', value: 'active' },
+  { label: '全部完成', value: 'completed' },
+  { label: '部分完成 / 等待处理', value: 'paused' },
+  { label: '已停止', value: 'stopped' },
+  { label: '执行失败', value: 'failed' },
+  { label: '待确认提交', value: 'uncertain' },
+  { label: '部分记录已淘汰', value: 'evicted' },
+]
+
+export const verdictOptions = [
+  { label: '全部结果', value: '' },
+  { label: '糖果答对', value: 'correct' },
+  { label: '糖果答错', value: 'wrong' },
+  { label: '指纹候选排名', value: 'ranked' },
+  { label: '绘图已生成', value: 'output' },
+]

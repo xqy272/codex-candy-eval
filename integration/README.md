@@ -1,3 +1,19 @@
+# 1.4.0 官方 UI 与交互验收
+
+使用 run_host.py 创建全新临时 CPR 3.39.0，注册官方 3.43.1 为唯一 matrix 目标。核对旧 1.3.1 与最终 1.4.0 归档后依次执行：
+
+1. python3 integration/native_client.py --baseline dist/cloudops.codex-candy-eval-1.3.1-x86_64-unknown-linux-gnu.tar.gz
+2. python3 integration/native-ui.py seed
+3. python3 integration/native-ui.py upgrade
+4. python3 integration/native-ui.py business
+5. node integration/native-ui-browser.mjs
+
+seed 写入历史、暂停样本、重复批次和草稿后请求宿主切换；upgrade 在原实例换包并核对声明和数据。business 验证三种受控测试、补测与停止；浏览器使用最终归档的真实 iframe 发起双账号指纹，核对恰好六次本机调用，并检查不透明来源、字体、主题、SVG、浮层、刷新和 390/320px。
+
+主题测试调用临时宿主自身的主题 Store，并比较宿主和插件的实际变量；不会改生产或读真实账号。只复制脱敏报告和夹具截图到 docs，不复制 control.json、数据库或凭据。结束时创建 .runtime/integration/stop，等待清理并确认端口释放。
+
+---
+
 # 1.3.1 账号名称回归
 
 仅使用下述 run_host.py 创建的全新临时 CPR 3.39.0。将原始 1.3.0 发布包和最终 1.3.1 包放在 dist，启动隔离宿主后依次执行：

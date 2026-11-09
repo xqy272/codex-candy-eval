@@ -1,0 +1,123 @@
+{
+  "archiveSha256": "23d0707152082eb32136d2f054039c349c7a35021e692a54f389c93d5d31915f",
+  "checks": [
+    "Declared bundled fonts load through native resource assembly",
+    "Actual native iframe denies Web Storage while restored draft remains readable",
+    "Upgraded same-instance repeated-candy result renders with its original samples",
+    "Two-account fingerprint started in actual native UI issues exactly six loopback requests",
+    "Host accepts dark through its own theme store",
+    "Actual bridge synchronizes surface, accent, font, radius and control tokens for dark",
+    "Theme token values are populated for dark",
+    "Host accepts teal through its own theme store",
+    "Actual bridge synchronizes surface, accent, font, radius and control tokens for teal",
+    "Theme token values are populated for teal",
+    "Host accepts violet-soft through its own theme store",
+    "Actual bridge synchronizes surface, accent, font, radius and control tokens for violet-soft",
+    "Theme token values are populated for violet-soft",
+    "Host accepts custom through its own theme store",
+    "Actual bridge synchronizes surface, accent, font, radius and control tokens for custom",
+    "Theme token values are populated for custom",
+    "Customized control height is consumed by the actual official button",
+    "Opaque iframe copy fallback includes all saved samples and source hashes",
+    "Saved SVG decodes in the final archive under real native CSP",
+    "Official dialog restores focus in the real isolated iframe",
+    "Native plugin fits 390px viewport",
+    "Native plugin fits 320px viewport",
+    "History, theme changes, zoom, refresh and mobile review generate no additional model requests",
+    "No browser JavaScript errors"
+  ],
+  "themes": [
+    {
+      "name": "dark",
+      "hostTokens": {
+        "color-bg-layout": "#0B111C",
+        "color-bg-container": "#111A29",
+        "color-primary": "#5983F4",
+        "font-size": "13px",
+        "border-radius": "8px",
+        "control-height": "38px",
+        "card-border-radius": "18px"
+      },
+      "pluginTokens": {
+        "color-bg-layout": "#0B111C",
+        "color-bg-container": "#111A29",
+        "color-primary": "#5983F4",
+        "font-size": "13px",
+        "border-radius": "8px",
+        "control-height": "38px",
+        "card-border-radius": "18px"
+      }
+    },
+    {
+      "name": "teal",
+      "hostTokens": {
+        "color-bg-layout": "#F1F1EC",
+        "color-bg-container": "#F8F8F3",
+        "color-primary": "#50605E",
+        "font-size": "13px",
+        "border-radius": "8px",
+        "control-height": "38px",
+        "card-border-radius": "18px"
+      },
+      "pluginTokens": {
+        "color-bg-layout": "#F1F1EC",
+        "color-bg-container": "#F8F8F3",
+        "color-primary": "#50605E",
+        "font-size": "13px",
+        "border-radius": "8px",
+        "control-height": "38px",
+        "card-border-radius": "18px"
+      }
+    },
+    {
+      "name": "violet-soft",
+      "hostTokens": {
+        "color-bg-layout": "#F5EFF0",
+        "color-bg-container": "#FCF6F7",
+        "color-primary": "#D395A8",
+        "font-size": "13px",
+        "border-radius": "13px",
+        "control-height": "38px",
+        "card-border-radius": "24px"
+      },
+      "pluginTokens": {
+        "color-bg-layout": "#F5EFF0",
+        "color-bg-container": "#FCF6F7",
+        "color-primary": "#D395A8",
+        "font-size": "13px",
+        "border-radius": "13px",
+        "control-height": "38px",
+        "card-border-radius": "24px"
+      }
+    },
+    {
+      "name": "custom",
+      "hostTokens": {
+        "color-bg-layout": "#0C111C",
+        "color-bg-container": "#141927",
+        "color-primary": "#8A3EC4",
+        "font-size": "15px",
+        "border-radius": "14px",
+        "control-height": "44px",
+        "card-border-radius": "22px"
+      },
+      "pluginTokens": {
+        "color-bg-layout": "#0C111C",
+        "color-bg-container": "#141927",
+        "color-primary": "#8A3EC4",
+        "font-size": "15px",
+        "border-radius": "14px",
+        "control-height": "44px",
+        "card-border-radius": "22px"
+      }
+    }
+  ],
+  "pageErrors": [],
+  "realModelRequests": 0,
+  "controlledUiCalls": 6,
+  "viewportWidths": [
+    1440,
+    390,
+    320
+  ]
+}

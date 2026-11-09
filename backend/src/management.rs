@@ -96,13 +96,19 @@ pub fn registration() -> ManagementRegistration {
             route("POST", "api/batch-stop"),
             route("POST", "api/account-stop"),
         ],
-        resources: ["web/index.html", "web/app.js", "web/app.css"]
-            .into_iter()
-            .map(|p| ManagementResource {
-                path: p.into(),
-                public: false,
-            })
-            .collect(),
+        resources: [
+            "web/index.html",
+            "web/app.js",
+            "web/app.css",
+            "web/fonts/inter-latin-wght-normal.woff2",
+            "web/fonts/jetbrains-mono-latin-wght-normal.woff2",
+        ]
+        .into_iter()
+        .map(|p| ManagementResource {
+            path: p.into(),
+            public: false,
+        })
+        .collect(),
         pages: vec![ManagementPage {
             id: "codex-candy-eval".into(),
             title: "模型测试".into(),

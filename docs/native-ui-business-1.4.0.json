@@ -1,0 +1,19 @@
+{
+  "checks": [
+    "Released 1.3.1 on official CPR 3.39.0 seeded with legacy history, completed batch, private draft and paused sample",
+    "Same plugin instance upgraded across CPR 3.39.0 to 3.43.1 and 1.3.1 to 1.4.0 with every private-state declaration, old result, draft, batch and paused sample unchanged",
+    "Paused unknown-consumption request was not automatically replayed",
+    "Final archive completed two-account candy using only loopback controlled responses",
+    "Final archive completed two-account fingerprint using only loopback controlled responses",
+    "Final archive completed two-account pelican using only loopback controlled responses",
+    "Fingerprint missing-sample resume preserves first two attempts and issues one additional controlled request",
+    "Stopping one account covers its remaining repeats while sibling account completes",
+    "Stopping whole batch persists scope and retains earlier completed batches"
+  ],
+  "realModelRequests": 0,
+  "archiveSha256": "23d0707152082eb32136d2f054039c349c7a35021e692a54f389c93d5d31915f",
+  "officialHostVersion": "3.43.1",
+  "hostBinarySha256": "2e23385b35db58e30d09cc82fcf8541eb6620f82226dcb4a31680707902fb5c8",
+  "observedAtUtc": "2026-11-09T08:25:41.747180+00:00",
+  "requestCountSource": "final-audit-1.4.0.json; checkpoint-time ledger is not used as the final count"
+}

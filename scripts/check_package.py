@@ -3,6 +3,8 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import posixpath
+import re
 import tarfile
 
 
@@ -26,6 +28,22 @@ def check(archive: Path):
     for name, digest in packaged["files"].items():
         if hashlib.sha256(files[name]).hexdigest() != digest:
             raise ValueError(f"资源 SHA-256 不匹配：{name}")
+    # The host resolves CSS URLs through declared static resources, including fonts.
+    # Pre-inlined data URLs pass a browser-only preview but fail native page assembly.
+    for name, content_type in manifest["resources"].items():
+        if name.startswith("web/") and len(files[name]) > 1024 * 1024:
+            raise ValueError(f"单个管理资源超过宿主上限：{name}")
+        if content_type != "text/css":
+            continue
+        for match in re.finditer(r"url\(\s*([^)]+?)\s*\)", files[name].decode("utf-8")):
+            reference = match[1].strip().strip("\"'")
+            if reference.startswith("#"):
+                continue
+            if ":" in reference or reference.startswith("/") or "\\" in reference:
+                raise ValueError(f"CSS 必须引用包内已声明资源：{name}")
+            resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), reference))
+            if resolved not in manifest["resources"]:
+                raise ValueError(f"CSS 引用未声明资源：{resolved}")
     if not modes[manifest["main"]] & 0o111:
         raise ValueError("插件程序没有执行权限")
     target = packaged["target"]

@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick, type UnwrapNestedRefs } from 'vue'
 import {
   api,
   ApiError,
@@ -9,7 +9,7 @@ import {
   type ClientKey,
   type RecordEntry,
 } from './api'
-import { accountDisplayName, active, label } from './presentation'
+import { accountDisplayName, active, executionState, label, verdict } from './presentation'
 export function workspace() {
   const nav = ref<'test' | 'history'>('test'),
     kind = ref('fingerprint'),
@@ -47,7 +47,12 @@ export function workspace() {
     filterDate = ref(''),
     clock = ref(Date.now()),
     comparison = ref<RecordEntry[]>([]),
-    gallery = ref<RecordEntry[]>([])
+    gallery = ref<RecordEntry[]>([]),
+    comparisonCandidate = ref<RecordEntry | null>(null),
+    detailOpen = ref(false),
+    syncError = ref(''),
+    lastSyncedAt = ref<number | null>(null),
+    filterVerdict = ref('')
   const workspaceConflict = ref(false)
   let workspaceVersion: number | null = null,
     saveQueue: Promise<void> = Promise.resolve(),
@@ -72,7 +77,9 @@ export function workspace() {
     restoring = true,
     testFocus = '',
     testScroll = 0,
-    historyScroll = 0
+    historyScroll = 0,
+    historyListScroll = 0,
+    testDetailOpen = false
   function persist(strict = false): Promise<void> {
     const serialized = JSON.stringify({
       kind: kind.value,
@@ -170,33 +177,39 @@ export function workspace() {
       selected.value.length *
       (kind.value === 'fingerprint' ? 3 : kind.value === 'candy' ? repeats.value : 1),
   )
-  const ready = computed(
-    () =>
-      !!keyId.value &&
-      !!model.value &&
-      selected.value.length > 0 &&
-      !busy.value &&
-      !loading.value &&
-      !modelLoading.value &&
-      !isPreview &&
-      !pending.value &&
-      !workspaceConflict.value,
-  )
+  const readinessReason = computed(() => {
+    if (isPreview) return '请从 CPR 插件入口打开'
+    if (loading.value) return '正在读取账号与配置'
+    if (workspaceConflict.value) return '草稿已在其他页面变化，请刷新读取'
+    if (pending.value) return '上次提交尚未确认，请先核对原批次'
+    if (busy.value) return '正在保存操作'
+    if (!keyId.value) return keys.value.length ? '请选择客户端 Key' : '暂无可用客户端 Key'
+    if (modelLoading.value) return '正在读取模型'
+    if (!model.value) return models.value.length ? '请选择模型' : '所选 Key 暂无可用模型'
+    if (!selected.value.length) return '请选择至少一个可用账号'
+    return ''
+  })
+  const ready = computed(() => !readinessReason.value)
   const running = computed(() => batchRows.value.some(active))
-  const batchStatus = (b: Batch) => {
+  const globalRunning = computed(() => records.value.some(active))
+  const showDetail = computed(
+    () => !!legacyId.value && nav.value === 'history' || batchAccounts.value.length === 1 || detailOpen.value,
+  )
+  const historyDetail = computed(() => !!historyId.value || !!legacyId.value)
+  const batchState = (b: Batch) => {
     const rows = records.value.filter((r) => r.batchId === b.request.id)
-    return !b.ready && !b.stopped
-      ? '待确认提交'
-      : rows.some(active)
-        ? '检测中'
-        : b.stopped || (rows.length > 0 && rows.every((r) => r.status === 'stopped'))
-          ? '已停止'
-          : rows.some((r) => ['paused', 'stopped'].includes(r.status))
-            ? '部分完成'
-            : rows.length < b.taskIds.length
-              ? '部分记录已淘汰'
-              : '全部完成'
+    if (!b.ready && !b.stopped) return 'uncertain'
+    if (rows.some(active)) return 'active'
+    if (b.stopped || rows.length > 0 && rows.every((r) => executionState(r) === 'stopped')) return 'stopped'
+    if (rows.some((r) => r.status === 'paused' || r.status === 'stopped')) return 'paused'
+    if (rows.some((r) => executionState(r) === 'failed')) return 'failed'
+    if (rows.length < b.taskIds.length) return 'evicted'
+    return 'completed'
   }
+  const batchStatus = (b: Batch) => ({
+    uncertain: '待确认提交', active: '检测中', stopped: '已停止',
+    paused: '部分完成', failed: '执行失败', evicted: '部分记录已淘汰', completed: '全部完成',
+  })[batchState(b)]
   const completedAccounts = computed(() =>
     batchAccounts.value.filter((id) => {
       const rows = batchRows.value.filter((r) => r.accountId === id)
@@ -225,7 +238,12 @@ export function workspace() {
       (b) =>
         (!filterKind.value || b.request.kind === filterKind.value) &&
         (!filterAccount.value || b.request.accountIds.includes(filterAccount.value)) &&
-        (!filterStatus.value || batchStatus(b) === filterStatus.value) &&
+        (!filterStatus.value || batchState(b) === filterStatus.value) &&
+        (!filterVerdict.value || records.value.some((r) =>
+          r.batchId === b.request.id &&
+          (!filterAccount.value || r.accountId === filterAccount.value) &&
+          executionState(r) === 'completed' && verdict(r) === filterVerdict.value,
+        )) &&
         (!filterDate.value ||
           new Date(b.startedAt).toLocaleDateString('en-CA') === filterDate.value),
     ),
@@ -236,7 +254,8 @@ export function workspace() {
         !r.batchId &&
         (!filterKind.value || r.kind === filterKind.value) &&
         (!filterAccount.value || r.accountId === filterAccount.value) &&
-        (!filterStatus.value || label(r) === filterStatus.value) &&
+        (!filterStatus.value || executionState(r) === filterStatus.value) &&
+        (!filterVerdict.value || executionState(r) === 'completed' && verdict(r) === filterVerdict.value) &&
         (!filterDate.value ||
           new Date(r.startedAt).toLocaleDateString('en-CA') === filterDate.value),
     ),
@@ -294,8 +313,10 @@ export function workspace() {
       batches.value = b.records
       if (loading.value || t.records.some(active)) concurrency.value = b.concurrency
       await Promise.all([loadResult(), loadGallery()])
+      lastSyncedAt.value = Date.now()
+      syncError.value = ''
     } catch (e) {
-      error.value = (e as Error).message
+      syncError.value = (e as Error).message
     } finally {
       if (schedule && !disposed) {
         clearTimeout(timer)
@@ -368,6 +389,7 @@ export function workspace() {
     outputVersion.value = d?.outputVersion ?? 'svg-v1'
     currentBatchId.value = d?.batchId ?? ''
     focus.value = d?.focus ?? ''
+    detailOpen.value = false
     resultRecords.value = []
     persist()
     void loadResult()
@@ -381,13 +403,15 @@ export function workspace() {
       const result = await api.batchSubmit(pending.value)
       currentBatchId.value = result.batch.request.id
       focus.value = result.batch.request.accountIds[0] ?? ''
+      detailOpen.value = result.batch.request.accountIds.length === 1
+      mobileAccounts.value = false
       historyId.value = ''
       legacyId.value = ''
       pending.value = null
       nav.value = 'test'
       persist()
       await poll(false)
-      notice.value = '检测已提交，关闭页面后继续执行。'
+      notice.value = '检测已提交，关闭页面后继续执行'
     } catch (e) {
       let rejected = false
       if (e instanceof ApiError && [400, 403, 409].includes(e.status)) {
@@ -449,21 +473,26 @@ export function workspace() {
     }
   }
   function openBatch(b: Batch) {
+    historyListScroll = scrollY
     historyId.value = b.request.id
     legacyId.value = ''
     focus.value = b.request.accountIds[0] ?? ''
+    detailOpen.value = b.request.accountIds.length === 1
     resultRecords.value = []
     void loadResult()
   }
   function openLegacy(r: RecordEntry) {
+    historyListScroll = scrollY
     historyId.value = ''
     legacyId.value = r.id
     focus.value = r.accountId
+    detailOpen.value = true
     resultRecords.value = []
     void loadResult()
   }
   function focusAccount(id: string) {
     focus.value = id
+    detailOpen.value = true
     resultRecords.value = []
     if (nav.value === 'test') persist()
     void loadResult()
@@ -476,8 +505,21 @@ export function workspace() {
   }
   function compare(r: RecordEntry) {
     if (comparison.value.some((v) => v.id === r.id)) return
-    if (comparison.value.length === 2) comparison.value.shift()
-    comparison.value.push(r)
+    if (comparison.value.length === 2) comparisonCandidate.value = r
+    else comparison.value.push(r)
+  }
+  function replaceComparison(index: number) {
+    if (comparisonCandidate.value && [0, 1].includes(index)) {
+      comparison.value.splice(index, 1, comparisonCandidate.value)
+      comparisonCandidate.value = null
+    }
+  }
+  function closeHistory() {
+    historyId.value = ''
+    legacyId.value = ''
+    detailOpen.value = false
+    resultRecords.value = []
+    void nextTick().then(() => window.scrollTo(0, historyListScroll))
   }
   watch(
     [model, keyId, selected, effort, profile, repeats, outputVersion],
@@ -495,10 +537,15 @@ export function workspace() {
   watch(nav, (next) => {
     if (next === 'history') {
       testFocus = focus.value
+      testDetailOpen = detailOpen.value
       testScroll = scrollY
+      historyId.value = ''
+      legacyId.value = ''
+      detailOpen.value = false
     } else {
       historyScroll = scrollY
       focus.value = testFocus
+      detailOpen.value = testDetailOpen
     }
     resultRecords.value = []
     void Promise.all([loadResult(), loadGallery()]).then(async () => {
@@ -562,6 +609,18 @@ export function workspace() {
     clock,
     comparison,
     gallery,
+    comparisonCandidate,
+    replaceComparison,
+    readinessReason,
+    syncError,
+    lastSyncedAt,
+    globalRunning,
+    showDetail,
+    historyDetail,
+    detailOpen,
+    closeHistory,
+    filterVerdict,
+    batchState,
     currentBatch,
     batchRows,
     batchAccounts,
@@ -592,3 +651,4 @@ export function workspace() {
     compare,
   }
 }
+export type Workspace = UnwrapNestedRefs<ReturnType<typeof workspace>>

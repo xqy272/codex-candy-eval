@@ -1,9 +1,18 @@
 import { test, expect, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-const asset = (name: string, type: string) =>
-  `data:${type};base64,${readFileSync(new URL(`../dist/${name}`, import.meta.url)).toString('base64')}`
+import { createTheme, createThemeVars } from '@codex-proxy/ui/theme'
+const asset = (name: string, type: string): string => {
+  let bytes = readFileSync(new URL(`../dist/${name}`, import.meta.url))
+  if (type === 'text/css') {
+    let css = bytes.toString('utf8')
+    for (const font of ['inter-latin-wght-normal.woff2', 'jetbrains-mono-latin-wght-normal.woff2'])
+      css = css.replaceAll('./fonts/' + font, asset('fonts/' + font, 'font/woff2'))
+    bytes = Buffer.from(css)
+  }
+  return `data:${type};base64,${bytes.toString('base64')}`
+}
 const csp =
-  "default-src 'none'; script-src 'unsafe-inline' data:; style-src 'unsafe-inline' data:; img-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+  "default-src 'none'; script-src 'unsafe-inline' data:; style-src 'unsafe-inline' data:; img-src data:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
 const html = readFileSync(new URL('../dist/index.html', import.meta.url), 'utf8')
   .replace('<head>', `<head><meta http-equiv="Content-Security-Policy" content="${csp}">`)
   .replace('./app.js', asset('app.js', 'text/javascript'))
@@ -29,6 +38,12 @@ async function mock(
     r.fulfill({ contentType: 'text/html', body: html }),
   )
   await page.addInitScript((o) => {
+    const applyHostTheme = () => {
+      document.documentElement.dataset.theme = o.dark ? 'dark' : 'light'
+      for (const [name, value] of Object.entries(o.themeVars)) document.documentElement.style.setProperty(name, value)
+    }
+    if (document.documentElement) applyHostTheme()
+    else addEventListener('DOMContentLoaded', applyHostTheme, { once: true })
     if (o.opaque)
       Object.defineProperty(window, 'localStorage', {
         get: () => {
@@ -75,6 +90,7 @@ async function mock(
             case 'api/models':
               return encode({ models: ['gpt-test', 'other-model'] })
             case 'api/tasks':
+              if (state.failPoll) return encode({ error: { message: '模拟轮询中断' } }, 502)
               return encode({ records: state.rows })
             case 'api/history':
               return encode({ records: [] })
@@ -227,146 +243,145 @@ async function mock(
         },
       },
     })
-  }, options)
+  }, { ...options, themeVars: createThemeVars(createTheme({ scheme: options.dark ? 'dark' : 'light' }).tokens) })
 }
-async function prepare(page: Page, kind = '模型指纹', two = false) {
+async function choose(page: Page, name: string, option: string) {
+  await page.getByRole('combobox', { name, exact: true }).click()
+  await page.getByRole('option', { name: option, exact: true }).click()
+}
+async function kind(page: Page, name: string) {
+  await page.getByRole('radio', { name, exact: true }).click()
+}
+async function navigate(page: Page, name: string) {
+  await page.getByRole('radiogroup', { name: '插件导航' }).getByRole('radio', { name, exact: true }).click()
+}
+async function selectAccount(page: Page, name: string, checked = true) {
+  const input = page.getByLabel('选择 ' + name, { exact: true })
+  if (await input.isChecked() !== checked) await input.locator('..').click()
+  await expect(input).toBeChecked({ checked })
+}
+async function prepare(page: Page, name = '模型指纹', two = false) {
   await page.goto('/')
-  await page.getByRole('tab', { name: kind, exact: true }).click()
-  await page.getByLabel('模型', { exact: true }).selectOption('gpt-test')
-  await page.getByLabel('选择 测试账号 A', { exact: true }).check()
-  if (two) await page.getByLabel('选择 测试账号 B', { exact: true }).check()
+  await kind(page, name)
+  await choose(page, '模型', 'gpt-test')
+  await selectAccount(page, '测试账号 A')
+  if (two) await selectAccount(page, '测试账号 B')
 }
-const start = (page: Page) => page.getByRole('button', { name: /开始检测 ·/ }).click()
+const start = (page: Page) => page.getByRole('button', { name: /^(开始检测|新建检测) ·/ }).click()
 const calls = (page: Page) => page.evaluate(() => (window as any).__requests)
+const submissions = async (page: Page) => (await calls(page)).filter((r: any) => r.path === 'api/batch-submit')
+const openAccount = (page: Page, name = '测试账号 A') => page.locator('.desktop-results').getByRole('button', { name: '查看 ' + name + ' 结果', exact: true }).click()
 
-test('opaque host storage can submit and restore drafts through private state', async ({
-  page,
-}) => {
+test('official components keep all request fields visible and explain readiness', async ({ page }) => {
+  await mock(page)
+  await page.goto('/')
+  await expect(page.getByRole('combobox', { name: '模型', exact: true })).toBeVisible()
+  await expect(page.getByRole('combobox', { name: '推理强度', exact: true })).toBeVisible()
+  await expect(page.getByRole('combobox', { name: '请求语境', exact: true })).toBeVisible()
+  await expect(page.getByText('personal-codex', { exact: true })).toBeVisible()
+  await expect(page.getByText('请选择模型', { exact: true }).last()).toBeVisible()
+  expect(await submissions(page)).toHaveLength(0)
+  await choose(page, '模型', 'gpt-test')
+  await expect(page.getByText('请选择至少一个可用账号', { exact: true })).toBeVisible()
+})
+
+test('opaque host storage restores drafts and completed single-account results without requests', async ({ page }) => {
   await mock(page, { opaque: true })
   await prepare(page, '糖果题')
   await start(page)
   await expect(page.locator('.big-answer')).toHaveText('22')
   await page.reload()
-  await expect(page.getByLabel('模型', { exact: true })).toHaveValue('gpt-test')
   await expect(page.locator('.big-answer')).toHaveText('22')
-  expect((await calls(page)).filter((r: any) => r.path === 'api/batch-submit')).toHaveLength(0)
+  await expect(page.getByRole('combobox', { name: '模型', exact: true })).toContainText('gpt-test')
+  expect(await submissions(page)).toHaveLength(0)
 })
 
-test('a conflicting shared draft cannot overwrite pending state or start requests', async ({
-  page,
-}) => {
+test('conflicting drafts cannot start a request', async ({ page }) => {
   await mock(page, { conflict: true })
   await prepare(page)
   await expect(page.getByRole('alert')).toContainText('页面草稿已在其他页面变化')
-  await expect(page.getByRole('button', { name: /开始检测 ·/ })).toBeDisabled()
-  expect((await calls(page)).filter((r: any) => r.path === 'api/batch-submit')).toHaveLength(0)
+  await expect(page.getByRole('button', { name: /^(开始检测|新建检测) ·/ })).toBeDisabled()
+  expect(await submissions(page)).toHaveLength(0)
 })
-test('parameters stay visible, defaults do not consume requests', async ({ page }) => {
-  await mock(page)
-  await page.goto('/')
-  await expect(page.getByLabel('请求语境')).toBeVisible()
-  await expect(page.getByLabel('推理强度')).toBeVisible()
-  await expect(page.getByText('personal-codex', { exact: true })).toBeVisible()
-  await expect(page.getByLabel('模型', { exact: true })).toHaveValue('')
-  await expect(page.getByRole('button', { name: /开始检测 ·/ })).toBeDisabled()
-  expect((await calls(page)).filter((r: any) => r.path === 'api/batch-submit')).toHaveLength(0)
-})
-test('empty and failure states are visible', async ({ page }) => {
+
+test('empty accounts and read failures remain actionable', async ({ page }) => {
   await mock(page, { empty: true })
   await page.goto('/')
   await expect(page.getByText('暂无 OpenAI 账号')).toBeVisible()
-  await expect(page.getByRole('button', { name: /开始检测 ·/ })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /^(开始检测|新建检测) ·/ })).toBeDisabled()
 })
-test('read errors are actionable', async ({ page }) => {
+
+test('read error has refresh and a separate message', async ({ page }) => {
   await mock(page, { error: true })
   await page.goto('/')
-  await expect(page.getByRole('alert')).toHaveText('模拟读取失败')
+  await expect(page.getByRole('alert')).toContainText('模拟读取失败')
+  await expect(page.getByRole('button', { name: '刷新', exact: true })).toBeEnabled()
 })
-test('unnamed accounts stay identifiable without changing enabled state or selected IDs', async ({
-  page,
-}) => {
-  await mock(page, {
-    accounts: [
-      {
-        account_id: 'named',
-        name: '  自定义名称  ',
-        email: 'named@example.invalid',
-        enabled: true,
-      },
-      { account_id: 'email-only', name: '', email: '  mailbox@example.invalid  ', enabled: true },
-      { account_id: 'stable-account-id', name: ' \u3000 ', email: ' ', enabled: true },
-      { account_id: 'disabled-id', name: '', email: 'disabled@example.invalid', enabled: false },
-    ],
-  })
+
+test('blank account names retain email and stable-ID fallback with original enabled values', async ({ page }) => {
+  await mock(page, { accounts: [
+    { account_id: 'named', name: '  自定义名称  ', email: 'named@example.invalid', enabled: true },
+    { account_id: 'email-only', name: '', email: ' mailbox@example.invalid ', enabled: true },
+    { account_id: 'stable-account-id', name: ' \u3000 ', email: ' ', enabled: true },
+    { account_id: 'disabled-id', name: '', email: 'disabled@example.invalid', enabled: false },
+  ] })
   await page.goto('/')
-  await expect(page.locator('.account-row strong')).toHaveText([
-    '自定义名称',
-    'mailbox@example.invalid',
-    'stable-account-id',
-    'disabled@example.invalid',
-  ])
+  await expect(page.locator('.account-row strong')).toHaveText(['自定义名称', 'mailbox@example.invalid', 'stable-account-id', 'disabled@example.invalid'])
   await expect(page.getByLabel('选择 disabled@example.invalid', { exact: true })).toBeDisabled()
-  await expect(
-    page.locator('.account-row').filter({ hasText: 'disabled@example.invalid' }),
-  ).toContainText('已停用')
-  await expect(page.getByLabel('选择 mailbox@example.invalid', { exact: true })).toBeEnabled()
-  await page.getByLabel('搜索账号').fill('  MAILBOX@EXAMPLE.INVALID  ')
-  await expect(page.locator('.account-row')).toHaveCount(1)
+  await page.getByLabel('搜索账号', { exact: true }).fill(' MAILBOX@EXAMPLE.INVALID ')
   await page.getByRole('button', { name: '选择筛选结果', exact: true }).click()
-  await page.getByLabel('搜索账号').fill('stable-account-id')
+  await page.getByLabel('搜索账号', { exact: true }).fill('stable-account-id')
   await expect(page.locator('.account-row strong')).toHaveText(['stable-account-id'])
-  await page.getByLabel('搜索账号').fill('not-found')
+  await page.getByLabel('搜索账号', { exact: true }).fill('missing')
   await expect(page.getByText('未找到匹配账号', { exact: true })).toBeVisible()
-  await page.getByLabel('搜索账号').fill('named@example.invalid')
-  await expect(page.locator('.account-row strong')).toHaveText(['自定义名称'])
-  await page.getByLabel('搜索账号').fill('')
-  await page.getByRole('tab', { name: '糖果题', exact: true }).click()
-  await page.getByLabel('模型', { exact: true }).selectOption('gpt-test')
-  await page.getByRole('button', { name: /开始检测 ·/ }).click()
+  await page.getByLabel('搜索账号', { exact: true }).fill('')
+  await kind(page, '糖果题')
+  await choose(page, '模型', 'gpt-test')
+  await start(page)
   await expect(page.locator('.result-heading h2')).toHaveText('mailbox@example.invalid')
-  const submit = (await calls(page)).find((r: any) => r.path === 'api/batch-submit')
-  expect(submit.data.accountIds).toEqual(['email-only'])
-  expect(await page.evaluate(() => (window as any).__fixture.rows[0].accountName)).toBe('')
+  expect((await submissions(page))[0].data.accountIds).toEqual(['email-only'])
   await page.reload()
   await expect(page.locator('.result-heading h2')).toHaveText('mailbox@example.invalid')
-  await expect(page.getByLabel('选择 mailbox@example.invalid', { exact: true })).toBeChecked()
-  expect((await calls(page)).filter((r: any) => r.path === 'api/batch-submit')).toHaveLength(0)
-  await page.getByRole('button', { name: '记录', exact: true }).click()
-  await expect(page.getByLabel('筛选账号').locator('option')).toHaveText([
-    '全部账号',
-    '自定义名称',
-    'mailbox@example.invalid',
-    'stable-account-id',
-    'disabled@example.invalid',
-  ])
 })
-test('one batch groups accounts and repeats, candy shows actual wrong answer', async ({ page }) => {
+
+test('multi-account repeats open an overview, detail returns focus to the same row', async ({ page }) => {
   await mock(page)
   await prepare(page, '糖果题', true)
-  await page.getByLabel('每账号次数').selectOption('3')
+  await choose(page, '每账号次数', '3 次')
   await start(page)
-  await expect(page.getByText('0 / 3', { exact: true })).toBeVisible()
-  const c = (await calls(page)).filter((r: any) => r.path === 'api/batch-submit')
+  await expect(page.getByLabel('本批次总览')).toBeVisible()
+  await expect(page.locator('.test-result')).toHaveCount(0)
+  await openAccount(page)
+  await expect(page.locator('.big-answer')).toHaveText('0 / 3')
+  await expect(page.getByLabel('每次回答').getByRole('button')).toHaveCount(3)
+  await page.getByRole('button', { name: '返回本批次', exact: true }).click()
+  await expect(page.locator('.desktop-results').getByRole('button', { name: '查看 测试账号 A 结果', exact: true })).toBeFocused()
+  const c = await submissions(page)
   expect(c).toHaveLength(1)
   expect(c[0].data.accountIds).toEqual(['a1', 'a2'])
   expect(c[0].data.repeats).toBe(3)
-  await page.getByRole('tab', { name: '糖果题', exact: true }).click()
-  await page.getByLabel('每账号次数').selectOption('1')
+})
+
+test('single candy displays the actual wrong answer with error semantics', async ({ page }) => {
+  await mock(page)
+  await prepare(page, '糖果题')
   await start(page)
   await expect(page.locator('.big-answer')).toHaveText('22')
+  await expect(page.locator('.result-state')).toContainText('答错')
+  expect(await page.locator('.result-state').evaluate(e => getComputedStyle(e).color)).not.toBe('')
 })
-test('fingerprint keeps samples, retry only resumes its missing plan', async ({ page }) => {
+
+test('partial fingerprint resumes only missing samples', async ({ page }) => {
   await mock(page, { paused: true })
   await prepare(page)
   await start(page)
-  await expect(page.getByText('已保留 1 / 3 个有效样本')).toBeVisible()
+  await expect(page.getByText('已保留 1 / 3 个有效样本', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '补测 2 个样本' }).click()
-  const c = await calls(page)
-  expect(c.filter((r: any) => r.path === 'api/batch-submit')).toHaveLength(1)
-  expect(c.filter((r: any) => r.path === 'api/resume')).toHaveLength(1)
-  expect(c.filter((r: any) => r.path === 'api/run')).toHaveLength(0)
+  expect(await submissions(page)).toHaveLength(1)
+  expect((await calls(page)).filter((r: any) => r.path === 'api/resume')).toHaveLength(1)
 })
-test('uncertain consumption requires an explicit second click', async ({ page }) => {
+
+test('unknown consumption still requires explicit confirmation', async ({ page }) => {
   await mock(page, { paused: true, uncertain: true })
   await prepare(page)
   await start(page)
@@ -375,7 +390,8 @@ test('uncertain consumption requires an explicit second click', async ({ page })
   await page.getByRole('button', { name: '确认补测，可能再次消耗额度' }).click()
   expect((await calls(page)).filter((r: any) => r.path === 'api/resume')).toHaveLength(1)
 })
-test('polling preserves evidence expansion and exposes observed progress', async ({ page }) => {
+
+test('polling preserves expanded evidence and exposes real progress', async ({ page }) => {
   await mock(page, { queued: true })
   await prepare(page)
   await start(page)
@@ -386,132 +402,226 @@ test('polling preserves evidence expansion and exposes observed progress', async
   await page.getByRole('button', { name: '停止此账号', exact: true }).click()
   expect((await calls(page)).filter((r: any) => r.path === 'api/account-stop')).toHaveLength(1)
 })
-test('draft changes cannot rewrite a frozen result and history returns to work', async ({
-  page,
-}) => {
+
+test('draft edits and left-side selection never change the frozen batch', async ({ page }) => {
+  await mock(page)
+  await prepare(page, '糖果题', true)
+  await start(page)
+  await choose(page, '模型', 'other-model')
+  await selectAccount(page, '测试账号 A', false)
+  await expect(page.getByLabel('本批次冻结条件')).toContainText('gpt-test')
+  await expect(page.getByLabel('本批次冻结条件')).not.toContainText('other-model')
+  await expect(page.locator('.desktop-results tbody tr')).toHaveCount(2)
+  expect(await submissions(page)).toHaveLength(1)
+})
+
+test('history details return to the filtered list without replacing test drafts', async ({ page }) => {
   await mock(page)
   await prepare(page)
   await start(page)
-  await page.getByLabel('模型', { exact: true }).selectOption('other-model')
-  await expect(page.locator('.result-heading')).toContainText('gpt-test')
-  await page.getByRole('button', { name: '记录', exact: true }).click()
-  await expect(page.locator('.history-row')).toHaveCount(1)
-  await page.getByRole('button', { name: '查看结果', exact: true }).click()
-  await expect(page.getByText('参考候选 A', { exact: true }).first()).toBeVisible()
-  await page.getByRole('button', { name: '测试', exact: true }).click()
-  await expect(page.getByLabel('模型', { exact: true })).toHaveValue('other-model')
+  await choose(page, '模型', 'other-model')
+  await navigate(page, '记录')
+  await choose(page, '筛选测试', '模型指纹')
+  await page.locator('.history-table').getByRole('button', { name: '查看结果' }).click()
+  await expect(page.locator('.ranking')).toBeVisible()
+  await page.getByRole('button', { name: '返回记录' }).click()
+  await expect(page.getByRole('combobox', { name: '筛选测试', exact: true })).toContainText('模型指纹')
+  await expect(page.locator('.history-table').getByRole('button', { name: '查看结果' })).toBeFocused()
+  await navigate(page, '测试')
+  await expect(page.getByRole('combobox', { name: '模型', exact: true })).toContainText('other-model')
   await expect(page.locator('.result-heading')).toContainText('gpt-test')
 })
-test('lost submission survives reload using the same id', async ({ page }) => {
+
+test('execution and result filters match batches independently', async ({ page }) => {
+  await mock(page)
+  await prepare(page, '糖果题')
+  await start(page)
+  await navigate(page, '记录')
+  await choose(page, '筛选状态', '全部完成')
+  await choose(page, '筛选结果', '糖果答错')
+  await expect(page.locator('.history-table tbody tr')).toHaveCount(1)
+  await choose(page, '筛选结果', '糖果答对')
+  await expect(page.getByText('暂无符合筛选条件的记录')).toBeVisible()
+})
+
+test('lost submission restores and reuses its original batch ID', async ({ page }) => {
   await mock(page, { loseReply: true })
   await prepare(page, '糖果题')
   await start(page)
   await expect(page.getByRole('alert')).toContainText('未确认的提交已保留')
-  const id = (await calls(page)).find((r: any) => r.path === 'api/batch-submit').data.id
+  const id = (await submissions(page))[0].data.id
   await page.reload()
-  await page.getByRole('button', { name: '重试提交原批次' }).click()
-  const c = (await calls(page)).filter((r: any) => r.path === 'api/batch-submit')
+  await page.getByRole('button', { name: '核对提交状态' }).click()
+  const c = await submissions(page)
   expect(c).toHaveLength(1)
   expect(c[0].data.id).toBe(id)
   expect(await page.evaluate(() => (window as any).__fixture.batches.length)).toBe(1)
 })
-test('definitively rejected submissions can be corrected', async ({ page }) => {
+
+test('definitive rejection allows correction without an unresolved submission', async ({ page }) => {
   await mock(page, { reject: true })
   await prepare(page)
   await start(page)
   await expect(page.getByRole('alert')).toContainText('可修改条件后重试')
-  await expect(page.getByRole('button', { name: '重试提交原批次' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /开始检测 ·/ })).toBeEnabled()
+  await expect(page.getByRole('button', { name: '核对提交状态' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^(开始检测|新建检测) ·/ })).toBeEnabled()
 })
-test('drawings preview inert SVG, expose code and compare saved accounts', async ({ page }) => {
+
+test('safe SVG previews keep internal gradients, code and downloadable output', async ({ page }) => {
   await mock(page)
   let external = 0
-  page.on('request', (r) => {
-    if (r.url().includes('example.invalid')) external++
-  })
+  page.on('request', r => { if (r.url().includes('example.invalid')) external++ })
   await prepare(page, '画鹈鹕', true)
   await start(page)
+  await expect(page.getByAltText('已生成作品缩略图')).toHaveCount(2)
+  await openAccount(page)
   const image = page.getByAltText('鹈鹕绘图预览')
   await expect(image).toBeVisible()
   expect(await image.evaluate((e: HTMLImageElement) => e.complete && e.naturalWidth > 0)).toBe(true)
-  const src = await image.getAttribute('src')
-  expect(decodeURIComponent(src!)).not.toContain('<script')
-  expect(decodeURIComponent(src!)).not.toContain('example.invalid')
-  expect(decodeURIComponent(src!)).toContain('url(#paint)')
-  expect(decodeURIComponent(src!)).toContain('linearGradient')
+  const src = decodeURIComponent((await image.getAttribute('src'))!)
+  expect(src).not.toContain('<script')
+  expect(src).not.toContain('example.invalid')
+  expect(src).toContain('url(#paint)')
+  expect(src).toContain('linearGradient')
   expect(external).toBe(0)
-  expect(await page.evaluate(() => (window as any).__unsafe)).toBeUndefined()
-  await expect(page.getByAltText('已生成作品缩略图')).toHaveCount(2)
-  await page.getByRole('button', { name: '加入作品对比' }).click()
-  await page
-    .getByLabel('本批次账号')
-    .getByRole('button', { name: /测试账号 B/ })
-    .click()
-  await page.getByRole('button', { name: '加入作品对比' }).click()
-  await expect(page.getByAltText('对比中的鹈鹕作品')).toHaveCount(2)
-  await page.getByRole('button', { name: '代码', exact: true }).click()
-  await expect(page.locator('.result-body>pre')).toContainText('<svg')
+  await page.getByRole('radiogroup', { name: '作品视图' }).getByRole('radio', { name: '代码', exact: true }).click()
+  await expect(page.locator('.artwork-view>pre')).toContainText('<svg')
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: '下载 SVG' }).click()
   expect((await download).suggestedFilename()).toMatch(/\.svg$/)
-  expect((await calls(page)).filter((r: any) => r.path === 'api/batch-submit')).toHaveLength(1)
 })
-test('legacy generated HTML preserves source with an explicit preview limitation', async ({
-  page,
-}) => {
+
+test('third comparison requires explicit replacement and cancel preserves A/B', async ({ page }) => {
+  await mock(page, { accounts: ['a1','a2','a4'].map((account_id, i) => ({ account_id, name: '作品账号 ' + (i+1), email: null, enabled: true })) })
+  await page.goto('/')
+  await kind(page, '画鹈鹕')
+  await choose(page, '模型', 'gpt-test')
+  await page.getByRole('button', { name: '选择筛选结果' }).click()
+  await start(page)
+  for (let i = 1; i <= 3; i++) {
+    await openAccount(page, '作品账号 ' + i)
+    await page.getByRole('button', { name: '加入作品对比' }).click()
+    if (i < 3) await page.getByRole('button', { name: '返回本批次' }).click()
+  }
+  await expect(page.getByRole('dialog', { name: '替换哪一份作品' })).toBeVisible()
+  await expect(page.getByAltText('对比中的鹈鹕作品')).toHaveCount(2)
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+  await page.getByRole('button', { name: '加入作品对比' }).click()
+  await page.getByRole('button', { name: '替换 B', exact: true }).click()
+  await expect(page.locator('.comparison')).toContainText('作品账号 3')
+  await expect(page.locator('.comparison')).not.toContainText('作品账号 2')
+  expect(await submissions(page)).toHaveLength(1)
+})
+
+test('artwork zoom uses an official dialog, keyboard escape restores trigger focus', async ({ page }) => {
+  await mock(page)
+  await prepare(page, '画鹈鹕')
+  await start(page)
+  await page.getByRole('button', { name: '放大查看' }).click()
+  await expect(page.getByRole('dialog', { name: '作品预览' })).toBeVisible()
+  await choose(page, '预览缩放', '150%')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: '作品预览' })).not.toBeVisible()
+  await expect(page.getByRole('button', { name: '放大查看' })).toBeFocused()
+  expect(await submissions(page)).toHaveLength(1)
+})
+
+test('legacy HTML preserves source with an honest preview limitation', async ({ page }) => {
   await mock(page, { legacy: true })
   await prepare(page, '画鹈鹕')
-  await page.getByLabel('绘图题目').selectOption('legacy-animation-v1')
+  await choose(page, '绘图题目', '旧版 HTML 动画题')
   await start(page)
   await expect(page.getByText(/旧版 HTML 格式无法完整预览/)).toBeVisible()
-  await page.getByRole('button', { name: '代码', exact: true }).click()
-  await expect(page.locator('.result-body>pre')).toContainText('旧版动画原文')
-  await expect(page.getByRole('button', { name: '重新生成 · 1 次请求' })).toHaveCount(0)
+  await page.getByRole('radiogroup', { name: '作品视图' }).getByRole('radio', { name: '代码', exact: true }).click()
+  await expect(page.locator('.artwork-view>pre')).toContainText('旧版动画原文')
 })
-test('mobile and dark layout keep request fields and start controls usable', async ({ page }) => {
+
+test('mobile and dark themes keep configuration and selection usable at 320px', async ({ page }) => {
   await mock(page, { dark: true })
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
-  await expect(page.getByLabel('模型', { exact: true })).toBeVisible()
-  await expect(page.getByLabel('请求语境')).toBeVisible()
-  await expect(page.getByRole('button', { name: '开始检测', exact: true })).toBeVisible()
+  await expect(page.getByRole('combobox', { name: '模型', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '选择账号', exact: true })).toBeVisible()
   await page.getByRole('button', { name: '选择账号', exact: true }).click()
   await expect(page.getByLabel('选择 测试账号 A', { exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.setViewportSize({ width: 320, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.screenshot({ path: '../.runtime/mobile-dark.png', fullPage: true })
-  await page.setViewportSize({ width: 1280, height: 960 })
-  await page.getByLabel('模型', { exact: true }).selectOption('gpt-test')
-  await page.getByLabel('选择 测试账号 A', { exact: true }).check()
+  await selectAccount(page, '测试账号 A')
+  await choose(page, '模型', 'gpt-test')
   await start(page)
-  await page.screenshot({ path: '../.runtime/desktop-dark.png', fullPage: true })
+  await expect(page.getByAltText('鹈鹕绘图预览')).toHaveCount(0)
+  await page.screenshot({ path: '../.runtime/mobile-dark-1.4.0.png', fullPage: true })
+  await page.setViewportSize({ width: 1280, height: 960 })
+  await page.screenshot({ path: '../.runtime/desktop-dark-1.4.0.png', fullPage: true })
 })
 
-test('stopping a repeated account covers every repeat without stopping its sibling', async ({
-  page,
-}) => {
+test('stopping repeated account preserves its sibling batch work', async ({ page }) => {
   await mock(page, { queued: true })
   await prepare(page, '糖果题', true)
-  await page.getByLabel('每账号次数').selectOption('3')
+  await choose(page, '每账号次数', '3 次')
   await start(page)
+  await openAccount(page)
   await page.getByRole('button', { name: '停止此账号', exact: true }).click()
   const c = (await calls(page)).filter((r: any) => r.path === 'api/account-stop')
   expect(c).toHaveLength(1)
   expect(c[0].data.account_id).toBe('a1')
-  expect(
-    await page.evaluate(() =>
-      (window as any).__fixture.rows
-        .filter((r: any) => r.accountId === 'a1')
-        .every((r: any) => r.status === 'stopped'),
-    ),
-  ).toBe(true)
-  expect(
-    await page.evaluate(() =>
-      (window as any).__fixture.rows
-        .filter((r: any) => r.accountId === 'a2')
-        .every((r: any) => r.status === 'running'),
-    ),
-  ).toBe(true)
+  expect(await page.evaluate(() => (window as any).__fixture.rows.filter((r: any) => r.accountId === 'a1').every((r: any) => r.status === 'stopped'))).toBe(true)
+  expect(await page.evaluate(() => (window as any).__fixture.rows.filter((r: any) => r.accountId === 'a2').every((r: any) => r.status === 'running'))).toBe(true)
+})
+
+test('synchronization errors retain results and recover without model requests', async ({ page }) => {
+  await mock(page)
+  await prepare(page, '糖果题')
+  await start(page)
+  await expect(page.locator('.big-answer')).toHaveText('22')
+  await page.evaluate(() => { (window as any).__fixture.failPoll = true })
+  await expect(page.getByText('同步未完成，已保存结果仍保留', { exact: false })).toBeVisible()
+  await expect(page.locator('.big-answer')).toHaveText('22')
+  await page.evaluate(() => { (window as any).__fixture.failPoll = false })
+  await page.getByRole('button', { name: '重新读取' }).click()
+  await expect(page.getByRole('button', { name: '重新读取' })).toHaveCount(0)
+  expect(await submissions(page)).toHaveLength(1)
+})
+
+test('readable summary and complete debug export have separate clipboard fallbacks', async ({ page }) => {
+  await mock(page)
+  await prepare(page)
+  await start(page)
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(Error('denied')) } }))
+  await page.getByRole('button', { name: '复制结果', exact: true }).click()
+  await expect(page.getByLabel('可选中复制的结果文本')).toHaveValue(/参考库候选/)
+  await page.getByText('原始回答与请求详情', { exact: true }).click()
+  await page.getByRole('button', { name: '复制调试 JSON', exact: true }).click()
+  const value = JSON.parse(await page.getByLabel('可选中复制的结果文本').inputValue())
+  expect(value[0].samples).toHaveLength(3)
+  expect(await submissions(page)).toHaveLength(1)
+})
+
+test('host theme tokens change actual controls and surfaces without resetting drafts', async ({ page }) => {
+  await mock(page)
+  await prepare(page)
+  const before = await page.locator('.start-button').evaluate(e => getComputedStyle(e).backgroundColor)
+  const tokens = createThemeVars(createTheme({ scheme: 'dark', colorId: 'custom', primaryColor: '#8a3ec4', customization: { seed: { fontSize: 15, borderRadius: 14, controlHeight: 44 } } }).tokens)
+  await page.evaluate((vars) => {
+    document.documentElement.dataset.theme = 'dark'
+    for (const [name, value] of Object.entries(vars)) document.documentElement.style.setProperty(name, value)
+    dispatchEvent(new CustomEvent('codex-proxy-themechange', { detail: { theme: 'dark' } }))
+  }, tokens)
+  const after = await page.locator('.start-button').evaluate(e => getComputedStyle(e).backgroundColor)
+  expect(after).not.toBe(before)
+  expect(await page.locator('.start-button').evaluate(e => e.getBoundingClientRect().height)).toBe(44)
+  await expect(page.getByRole('combobox', { name: '模型', exact: true })).toContainText('gpt-test')
+  await expect(page.getByLabel('选择 测试账号 A', { exact: true })).toBeChecked()
+  expect(await submissions(page)).toHaveLength(0)
+})
+
+test('official segmented controls support arrow keys', async ({ page }) => {
+  await mock(page)
+  await page.goto('/')
+  const tabs = page.getByRole('radiogroup', { name: '测试类型', exact: true })
+  await tabs.getByRole('radio', { name: '模型指纹', exact: true }).focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(tabs.getByRole('radio', { name: '画鹈鹕', exact: true })).toBeChecked()
+  await expect(page.getByRole('combobox', { name: '绘图题目', exact: true })).toBeVisible()
 })

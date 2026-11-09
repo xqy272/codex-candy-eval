@@ -1,0 +1,53 @@
+{
+  "observedAtUtc": "2026-11-09T08:30:51.090226+00:00",
+  "version": "1.4.0",
+  "baseCommit": "7bbd5148d12c70a129104114c6a1aac72332577f",
+  "archive": {
+    "archiveSha256": "23d0707152082eb32136d2f054039c349c7a35021e692a54f389c93d5d31915f",
+    "bytes": 6840721,
+    "stateDeclarationsUnchanged": true,
+    "resourceBytesMatch": true,
+    "binarySha256": "0e870c1703f7fd3548999c3f9fac9da32c7fb091671ff5cb04f4296c55bdcf90",
+    "resources": 17,
+    "maximumGlibc": "GLIBC_2.28",
+    "files": 19
+  },
+  "officialUi": {
+    "version": "0.9.0",
+    "archiveSha256": "ca3d1f454a4b73346d824dbc5f8c427d1eba9e5cde3336f6e3b664c3de960335"
+  },
+  "declaredHostRange": ">=3.43.1, <3.44.0",
+  "nativeHost": {
+    "version": "3.43.1",
+    "binarySha256": "2e23385b35db58e30d09cc82fcf8541eb6620f82226dcb4a31680707902fb5c8",
+    "source": "Official release archive checked against checksums.txt and GitHub asset digest"
+  },
+  "rustTestsPassed": 37,
+  "rustFmt": true,
+  "allTargetsClippyWarningsDenied": true,
+  "fixedSourcesVerified": 92,
+  "frontendLockedOfflineInstallAndBuild": true,
+  "uiTestsPassed": 26,
+  "nativeUiChecksPassed": 24,
+  "nativeBusinessChecksPassed": 9,
+  "nativeUpgradeSourceHost": "3.39.0",
+  "nativeUpgradeSourcePlugin": "1.3.1",
+  "evidence": [
+    "native-ui-business-1.4.0.json",
+    "native-ui-1.4.0.json",
+    "final-audit-1.4.0.json",
+    "credentials-cleanup-1.4.0.json"
+  ],
+  "controlledRequestsFinalEnvironment": 40,
+  "realModelRequests": 0,
+  "productionModified": false,
+  "productionInspected": false,
+  "temporaryResourcesRemoved": true,
+  "limits": [
+    "Controlled fixtures establish integration, persistence, scheduling and presentation, not model identity accuracy.",
+    "Only final-archive CPR 3.43.1 Linux x86_64 runtime was tested; 3.39.0 was the upgrade source for the original 1.3.1 package.",
+    "Host theme changes were applied through the temporary host theme store and checked against actual iframe CSS tokens; no production theme was changed.",
+    "Initial development archive used pre-inlined fonts rejected by native CSS assembly; the final archive declares and loads fonts as management resources.",
+    "An earlier native UI check used a detached Frame after reload; its six controlled calls are counted in the audit. The corrected complete UI check passed with the same final archive."
+  ]
+}
