@@ -1,0 +1,29 @@
+{
+  "archiveSha256": "5cac903df721b2923c3b3e4eb9ce8e1ef627506389dbba05e7d511205a757fbf",
+  "controlledRequests": 41,
+  "controlledModels": {
+    "eval-candy": 7,
+    "eval-incomplete": 1,
+    "eval-markdown": 2,
+    "eval-fp": 6,
+    "eval-pelican": 2,
+    "eval-ciallo": 8,
+    "eval-ciallo-incomplete": 2,
+    "eval-error": 13
+  },
+  "activeAtEnd": 0,
+  "unknownConsumptionFixtureCalls": 1,
+  "controlledErrorFixtureCalls": 13,
+  "observedPeakRequests": 2,
+  "perAccountPeak": {
+    "A": 1,
+    "B": 1,
+    "C": 1,
+    "D": 1,
+    "E": 1,
+    "F": 1
+  },
+  "realModelRequests": 0,
+  "productionInspected": false,
+  "productionModified": false
+}

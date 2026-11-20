@@ -25,6 +25,11 @@ const MAX_PENDING: usize = 16;
 const MAX_TASKS: usize = 100;
 const MAX_ATTEMPTS: usize = 9;
 const SAMPLE_BUDGET: u64 = 12_000_000;
+fn pending_count(rows: &[Value]) -> usize {
+    rows.iter()
+        .filter(|r| !matches!(r["status"].as_str(), Some("completed" | "stopped")))
+        .count()
+}
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -153,13 +158,7 @@ pub async fn submit_batch(
     } else {
         let task_count = req.account_ids.len() * req.repeats;
         let rows = index(host).await?.0;
-        if rows
-            .iter()
-            .filter(|r| !matches!(r["status"].as_str(), Some("completed" | "stopped")))
-            .count()
-            + task_count
-            > MAX_PENDING
-        {
+        if pending_count(&rows) + task_count > MAX_PENDING {
             return Err(PluginFault::new(
                 ErrorCode::Capacity,
                 "未结束检测最多 16 份，请减少账号或次数，或先处理已有检测",
@@ -555,10 +554,13 @@ pub async fn has_pending(host: &HostClient) -> Result<bool, PluginFault> {
 }
 pub async fn list(state: &AppState, host: &HostClient) -> Result<Value, PluginFault> {
     let mut rows = index(host).await?.0;
+    let used = pending_count(&rows);
     for r in &mut rows {
         observe(state, r)?;
     }
-    Ok(json!({"records":rows}))
+    Ok(
+        json!({"records":rows,"capacity":{"limit":MAX_PENDING,"used":used,"available":MAX_PENDING.saturating_sub(used)}}),
+    )
 }
 async fn remove(host: &HostClient, id: &str) -> Result<(), PluginFault> {
     if let Some(mut job) = load(host, id).await? {
@@ -614,14 +616,7 @@ pub async fn submit(
         save(host, &job).await?;
         return Ok(json!({"record":job.record(),"duplicate":true}));
     }
-    if index(host)
-        .await?
-        .0
-        .iter()
-        .filter(|r| !matches!(r["status"].as_str(), Some("completed" | "stopped")))
-        .count()
-        >= MAX_PENDING
-    {
+    if pending_count(&index(host).await?.0) >= MAX_PENDING {
         return Err(PluginFault::new(ErrorCode::Capacity, "待处理任务已达上限"));
     }
     prune(host).await?;

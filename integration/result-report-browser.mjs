@@ -3,10 +3,10 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const hostVersion = process.argv[2]
-if (!['3.43.1', '3.44.0'].includes(hostVersion)) throw Error('Explicit official CPR version required')
+if (!['3.43.1', '3.44.0', '3.53.1'].includes(hostVersion)) throw Error('Explicit official CPR version required')
 const version = process.argv[3] ?? '1.4.2'
-if (!['1.4.2', '1.4.3'].includes(version)) throw Error('Unsupported report check version')
-const compactHistory = version === '1.4.3'
+if (!['1.4.2', '1.4.3', '1.4.4'].includes(version)) throw Error('Unsupported report check version')
+const compactHistory = version !== '1.4.2'
 const existingCiallo = process.argv[4] === '--verify-existing-ciallo'
 if (existingCiallo && !compactHistory) throw Error('Existing Ciallo verification requires 1.4.3')
 const work = new URL('../.runtime/integration/', import.meta.url)
@@ -23,6 +23,11 @@ const context = await browser.newContext({ viewport: { width: 1440, height: 960 
 const page = await context.newPage()
 page.setDefaultTimeout(12000)
 page.on('pageerror', error => errors.push(error.message))
+const listReads = []
+page.on('request', request => {
+  const path = new URL(request.url()).pathname
+  if (['api/tasks', 'api/history', 'api/batches'].some(route => path.endsWith('/' + route))) listReads.push(path)
+})
 const outerFrame = page.locator('iframe')
 const f = page.frameLocator('iframe')
 const detail = f.getByRole('dialog', { name: '检测结果', exact: true })
@@ -82,6 +87,30 @@ try {
   if (compactHistory) await f.getByRole('radio', { name: '糖果题', exact: true }).click()
   const [{ records: tasks }, { records: batches }] = await Promise.all([plugin('api/tasks'), plugin('api/batches')])
   check(tasks.every(row => !['queued', 'running', 'scoring'].includes(row.status)), 'Controlled tasks are quiescent before read-only UI verification')
+  if (version === '1.4.4') {
+    const capacity = (await plugin('api/tasks')).capacity
+    const allowance = f.getByLabel('队列余量', { exact: true })
+    check((await allowance.innerText()).includes(`剩余 ${capacity.available} / ${capacity.limit} 个任务名额`), 'Native queue allowance matches the backend snapshot including paused tasks')
+    await f.getByRole('button', { name: '选择筛选结果', exact: true }).click()
+    await choose(f, '每账号次数', '5 次')
+    check(await f.locator('.start-button').isDisabled() && (await allowance.innerText()).includes('本次需要 25 个'), 'Native UI blocks an oversized repeated-candy batch before submission')
+    await f.getByRole('radio', { name: '模型指纹', exact: true }).click()
+    check((await allowance.innerText()).includes('本次需要 5 个') && await f.locator('.start-button').isEnabled(), 'Native fingerprint plans 15 requests but occupies only five task places')
+    await f.getByRole('radio', { name: '糖果题', exact: true }).click()
+    await choose(f, '每账号次数', '3 次')
+    await f.getByRole('button', { name: '取消选择', exact: true }).click()
+    for (const name of ['Eval account A', 'Eval account B']) await f.getByLabel('选择 ' + name, { exact: true }).locator('..').click()
+    await screenshot('queue-allowance')
+    const focusStart = listReads.length
+    await inner.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await poll(() => listReads.length >= focusStart + 3, 'Returning focus did not synchronize the lists')
+    await page.waitForTimeout(300)
+    const idleStart = listReads.length
+    await page.waitForTimeout(8500)
+    check(listReads.length === idleStart, 'Native idle page makes no repeated list reads during the first 8.5 seconds')
+    await page.waitForTimeout(2100)
+    check(listReads.length === idleStart + 3, 'Native idle page performs exactly one three-list refresh in the next idle window')
+  }
   const oldBatch = batches.find(batch => batch.request.id === state.preservedBatchId)
   const oldTasks = oldBatch.taskIds.map(id => tasks.find(row => row.id === id))
   const reportTask = oldTasks.find(row => row.accountId === a)

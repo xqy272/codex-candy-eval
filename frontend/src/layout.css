@@ -128,6 +128,8 @@ h3 { font-size: calc(var(--z-font-size) * 1.6); font-weight: var(--z-font-weight
 .warning { background: var(--z-color-warning-container); color: var(--z-color-warning-on-container); }
 .error { background: var(--z-color-error-container); color: var(--z-color-error-on-container); }
 .notice-inline { display: flex; align-items: center; justify-content: space-between; gap: var(--eval-small-gap); color: var(--z-color-text-secondary); }
+.queue-capacity { color: var(--z-color-text-secondary); font-size: var(--z-font-size-sm); margin-top: var(--eval-small-gap); }
+.queue-exceeded { color: var(--z-color-warning); }
 .live-progress { display: flex; flex-direction: column; align-items: flex-start; gap: var(--eval-small-gap); }
 .live-progress details { width: 100%; }
 .sample-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--eval-small-gap); background: var(--z-color-fill-quaternary); padding: calc(var(--z-size-unit) * 3); border-radius: var(--z-border-radius); }

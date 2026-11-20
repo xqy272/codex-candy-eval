@@ -63,6 +63,11 @@ export interface Batch {
   stopped: boolean
   stoppedAccounts?: string[]
 }
+export interface QueueCapacity {
+  limit: number
+  used: number
+  available: number
+}
 export interface Sample {
   valid?: boolean
   step?: number
@@ -178,7 +183,7 @@ export const api = {
   accountStop: (id: string, accountId: string) =>
     request('api/account-stop', { id, account_id: accountId }),
   batchStop: (id: string) => request('api/batch-stop', { id }),
-  tasks: () => request<{ records: RecordEntry[] }>('api/tasks'),
+  tasks: () => request<{ records: RecordEntry[]; capacity: QueueCapacity }>('api/tasks'),
   submit: (data: {
     id: string
     accountId: string

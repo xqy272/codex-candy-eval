@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "Released 1.4.3 on CPR 3.43.1 retains a legacy answer, repeated batch, draft and unknown-consumption sample for upgrade",
+    "Same database and plugin instance upgrade from CPR 3.43.1 / plugin 1.4.3 to CPR 3.53.1 / plugin 1.4.4 preserves all state and does not replay the uncertain sample",
+    "Final archive completes two-account candy on official CPR 3.53.1",
+    "Final archive completes two-account fingerprint on official CPR 3.53.1",
+    "Final archive completes two-account pelican on official CPR 3.53.1",
+    "Final archive completes two-account ciallo on official CPR 3.53.1",
+    "Incomplete Ciallo remains paused and preserves its partial reply on CPR 3.53.1",
+    "Real host reports all 16 unfinished tasks, rejects over-capacity admission and accepts the same full-queue batch ID without duplicate work",
+    "Stopping the controlled failed batches releases exactly 13 task places and leaves the original uncertain sample untouched"
+  ],
+  "realModelRequests": 0,
+  "observedAtUtc": "2026-11-20T02:41:56.951657+00:00",
+  "archiveSha256": "5cac903df721b2923c3b3e4eb9ce8e1ef627506389dbba05e7d511205a757fbf",
+  "hostVersion": "3.53.1",
+  "hostBinarySha256": "ccbe7d37b9ab42599119353c5f39569a55b065877af43824ab9bf964244ecf77"
+}

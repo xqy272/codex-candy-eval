@@ -1,3 +1,24 @@
+# 1.4.4 队列余量、轮询与 CPR 3.53.1
+
+准备已发布的 1.4.3 和最终 1.4.4 归档。按下方 run_host.py 的数据库工具参数，用校验过官方摘要的 CPR 3.43.1 启动全新临时环境，并将官方 3.53.1 注册为唯一 `--matrix-cpr-dir`。按顺序执行，不并行业务与原生浏览器检查：
+
+```bash
+python3 integration/native_client.py --baseline dist/cloudops.codex-candy-eval-1.4.3-x86_64-unknown-linux-gnu.tar.gz
+python3 integration/queue-native.py seed
+python3 integration/queue-native.py upgrade
+python3 integration/queue-native.py business
+node integration/result-report-browser.mjs 3.53.1 1.4.4
+python3 integration/queue-native.py capacity
+```
+
+seed 保存旧历史、重复批次、私有草稿和未知消费样本；upgrade 保留数据库与原实例，先切换 CPR 3.53.1，再安装并切换最终包。新包的宿主范围为 `>=3.53.1, <3.54.0`；旧宿主使用原适配包，不将中间未验收 minor 版本纳入新声明。除新增的只读 capacity 投影，全部状态和旧报告逐项比较，未知消费样本不得重放。
+
+business 完成双账号四类测试与不完整 Ciallo。浏览器核对后端余量与页面、重复糖果超额拦截和指纹名额计算，观察实际管理桥的 10 秒空闲读取窗口，并保留报告、主题、滚动、390/320px、紧凑记录和六账号 Ciallo 检查。浏览器的六次请求只指向受控上游。capacity 再用本机错误夹具填满队列，核对满队列拒绝新 ID、相同 ID 幂等核对与停止后释放 13 个名额。
+
+前台/隐藏/运行中间隔、读取重叠、操作后再读和失败预检查另由页面测试的可控时钟覆盖；不把模拟的 visibilitychange 记为真实浏览器后台节流验收。证据在 `.runtime/integration/queue144-native.json` 和 `ui144-3.53.1/`。结束前按下方清理流程保存 `cleanup-target.json` 的临时目录与四个端口，创建 stop 并等待宿主退出，再运行 cleanup-ui.py；仅复制脱敏证据。
+
+---
+
 # 1.4.3 Ciallo 单词请求与紧凑历史行验收
 
 沿用下节的官方 CPR 3.43.1 / 3.44.0 隔离环境。准备发布的 1.4.2 和最终 1.4.3 归档，按顺序执行：

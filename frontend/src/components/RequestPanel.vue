@@ -53,12 +53,17 @@ const profileOptions = computed(() => Object.entries(profiles).map(([value, labe
           <p>检测消耗所选账号额度，同一账号逐题执行</p>
           <p>计划请求数不包含宿主可能发生的上游重试</p>
           <p>并行数是插件上限，实际执行还受账号与 Key 限制</p>
+          <p>未结束检测占用任务名额，等待处理也计入；指纹每账号占 1 个，糖果按次数计入</p>
         </section>
       </ZPopover>
       <ZButton class="start-button" type="primary" :disabled="!w.ready" :loading="w.busy" @click="w.start">
         {{ w.currentBatch ? '新建检测' : '开始检测' }} · {{ w.selected.length }} 个账号
       </ZButton>
     </div>
+    <p class="queue-capacity" :class="{ 'queue-exceeded': w.queueExceeded }" aria-label="队列余量" role="status">
+      <template v-if="w.queueCapacity">{{ w.syncError ? '上次读取：' : '' }}剩余 {{ w.queueCapacity.available }} / {{ w.queueCapacity.limit }} 个任务名额 · 本次需要 {{ w.requiredTasks }} 个</template>
+      <template v-else>尚未取得队列余量</template>
+    </p>
     <div class="readiness-row">
       <span v-if="w.readinessReason" class="muted" role="status">{{ w.readinessReason }}</span>
       <span v-else class="muted">上方条件用于下一次检测</span>

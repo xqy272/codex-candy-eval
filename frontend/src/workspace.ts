@@ -8,6 +8,7 @@ import {
   type BatchRequest,
   type ClientKey,
   type RecordEntry,
+  type QueueCapacity,
 } from './api'
 import { accountDisplayName, active, executionState, label, verdict } from './presentation'
 export function workspace() {
@@ -53,7 +54,8 @@ export function workspace() {
     syncError = ref(''),
     lastSyncedAt = ref<number | null>(null),
     filterVerdict = ref('')
-  const workspaceConflict = ref(false)
+  const workspaceConflict = ref(false),
+    queueCapacity = ref<QueueCapacity | null>(null)
   let workspaceVersion: number | null = null,
     saveQueue: Promise<void> = Promise.resolve(),
     lastSaved = ''
@@ -72,6 +74,8 @@ export function workspace() {
     sampleCache = new Map<string, RecordEntry['samples'][number]>()
   let disposed = false,
     timer: ReturnType<typeof setTimeout>,
+    pollInFlight: Promise<void> | null = null,
+    pollAgain = false,
     sequence = 0,
     reportSequence = 0,
     restoring = true,
@@ -181,6 +185,8 @@ export function workspace() {
       selected.value.length *
       (kind.value === 'fingerprint' ? 3 : kind.value === 'candy' ? repeats.value : 1),
   )
+  const requiredTasks = computed(() => selected.value.length * (kind.value === 'candy' ? repeats.value : 1))
+  const queueExceeded = computed(() => !!queueCapacity.value && requiredTasks.value > queueCapacity.value.available)
   const readinessReason = computed(() => {
     if (isPreview) return '请从 CPR 插件入口打开'
     if (loading.value) return '正在读取账号与配置'
@@ -191,6 +197,9 @@ export function workspace() {
     if (modelLoading.value) return '正在读取模型'
     if (!model.value) return models.value.length ? '请选择模型' : '所选 Key 暂无可用模型'
     if (!selected.value.length) return '请选择至少一个可用账号'
+    if (selected.value.length > 16) return '每批次最多选择 16 个账号'
+    if (!queueCapacity.value) return '尚未取得队列余量，请重新读取'
+    if (queueExceeded.value) return '队列名额不足，请减少账号或次数，或先处理未结束检测'
     return ''
   })
   const ready = computed(() => !readinessReason.value)
@@ -307,24 +316,52 @@ export function workspace() {
     const loaded = await Promise.all(rows.map(fetchDetail))
     if (currentBatch.value?.request.id === batch) gallery.value = loaded
   }
-  async function poll(schedule = true) {
-    try {
-      const [t, h, b] = await Promise.all([api.tasks(), api.history(), api.batches()])
-      if (disposed) return
-      records.value = [...t.records, ...h.records]
-      batches.value = b.records
-      if (loading.value || t.records.some(active)) concurrency.value = b.concurrency
-      await Promise.all([loadResult(), loadGallery()])
-      lastSyncedAt.value = Date.now()
-      syncError.value = ''
-    } catch (e) {
-      syncError.value = (e as Error).message
-    } finally {
-      if (schedule && !disposed) {
-        clearTimeout(timer)
-        timer = setTimeout(() => void poll(), 1200)
-      }
+  function schedulePoll() {
+    clearTimeout(timer)
+    if (disposed || isPreview || pollInFlight) return
+    const delay = document.visibilityState === 'hidden' ? 30000 : globalRunning.value ? 1200 : 10000
+    timer = setTimeout(() => void poll(), delay)
+  }
+  function poll(fresh = false): Promise<void> {
+    clearTimeout(timer)
+    if (disposed || isPreview) return Promise.resolve()
+    if (pollInFlight) {
+      if (fresh) pollAgain = true
+      return pollInFlight
     }
+    pollInFlight = (async () => {
+      do {
+        pollAgain = false
+        try {
+          const reads = [api.tasks(), api.history(), api.batches()] as const
+          const settled = await Promise.allSettled(reads)
+          const failure = settled.find(result => result.status === 'rejected')
+          if (failure?.status === 'rejected') throw failure.reason
+          const [t, h, b] = await Promise.all(reads)
+          if (disposed) return
+          records.value = [...t.records, ...h.records]
+          queueCapacity.value = t.capacity
+          batches.value = b.records
+          if (loading.value || t.records.some(active)) concurrency.value = b.concurrency
+          await Promise.all([loadResult(), loadGallery()])
+          lastSyncedAt.value = Date.now()
+          syncError.value = ''
+        } catch (e) {
+          if (!disposed) syncError.value = (e as Error).message
+        }
+      } while (pollAgain && !disposed)
+    })().finally(() => {
+      pollInFlight = null
+      schedulePoll()
+    })
+    return pollInFlight
+  }
+  function onVisibilityChange() {
+    if (document.visibilityState === 'visible') onFocus()
+    else schedulePoll()
+  }
+  function onFocus() {
+    if (!loading.value && document.visibilityState === 'visible') void poll()
   }
   async function loadModels() {
     const n = ++sequence
@@ -366,7 +403,7 @@ export function workspace() {
         accounts.value.some((a) => a.account_id === id && a.enabled),
       )
       await loadModels()
-      await poll()
+      await poll(true)
     } catch (e) {
       error.value = (e as Error).message
     } finally {
@@ -412,7 +449,7 @@ export function workspace() {
       pending.value = null
       nav.value = 'test'
       persist()
-      await poll(false)
+      await poll(true)
       notice.value = '检测已提交，关闭页面后继续执行'
     } catch (e) {
       let rejected = false
@@ -435,6 +472,15 @@ export function workspace() {
   }
   async function start() {
     if (!ready.value) return
+    busy.value = true
+    await poll(true)
+    busy.value = false
+    if (disposed) return
+    if (syncError.value) {
+      error.value = '无法核对最新队列余量，请重新读取后再提交'
+      return
+    }
+    if (!ready.value) return
     pending.value = {
       id: crypto.randomUUID(),
       accountIds: [...selected.value],
@@ -455,7 +501,7 @@ export function workspace() {
     try {
       if (name === 'stop' && r.batchId) await api.accountStop(r.batchId, r.accountId)
       else await api.action(name, r.id)
-      await poll(false)
+      await poll(true)
     } catch (e) {
       error.value = (e as Error).message
     } finally {
@@ -467,7 +513,7 @@ export function workspace() {
     busy.value = true
     try {
       await api.batchStop(currentBatch.value.request.id)
-      await poll(false)
+      await poll(true)
     } catch (e) {
       error.value = (e as Error).message
     } finally {
@@ -558,6 +604,8 @@ export function workspace() {
     })
   })
   onMounted(async () => {
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('focus', onFocus)
     if (!isPreview) {
       try {
         await readWorkspace()
@@ -572,10 +620,15 @@ export function workspace() {
   const ticker = setInterval(() => (clock.value = Date.now()), 1000)
   onBeforeUnmount(() => {
     disposed = true
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    window.removeEventListener('focus', onFocus)
     clearTimeout(timer)
     clearInterval(ticker)
   })
   return {
+    queueCapacity,
+    requiredTasks,
+    queueExceeded,
     nav,
     kind,
     model,

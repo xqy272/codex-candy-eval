@@ -985,6 +985,57 @@ fn batch(id: &str, kind: &str, repeats: usize) -> Value {
     json!({"id":id,"accountIds":["account-test"],"clientKeyId":"key-test","model":"gpt-test","effort":"","kind":kind,"profile":"simple-v1","repeats":repeats,"concurrency":2,"outputVersion":"svg-v1"})
 }
 #[tokio::test]
+async fn queue_capacity_matches_admission_including_pauses_and_idempotent_retries() {
+    let mut h = Host::start().await;
+    h.call(1, "api/tasks", None).await;
+    assert_eq!(
+        h.result(1, "", false, true).await.1["capacity"],
+        json!({"limit":16,"used":0,"available":16})
+    );
+    for (id, name) in [(3, "capacity-a"), (5, "capacity-b"), (7, "capacity-c")] {
+        h.call(id, "api/batch-submit", Some(batch(name, "candy", 5)))
+            .await;
+        assert_eq!(h.result(id, "", false, true).await.0, 200);
+    }
+    h.jobs.get_mut("queue/index").unwrap().0["records"][0]["status"] = json!("paused");
+    h.call(9, "api/tasks", None).await;
+    assert_eq!(
+        h.result(9, "", false, true).await.1["capacity"],
+        json!({"limit":16,"used":15,"available":1})
+    );
+    let fingerprint = batch("capacity-fingerprint", "fingerprint", 1);
+    for id in [11, 13] {
+        h.call(id, "api/batch-submit", Some(fingerprint.clone()))
+            .await;
+        assert_eq!(h.result(id, "", false, true).await.0, 200);
+    }
+    h.call(15, "api/tasks", None).await;
+    let full = h.result(15, "", false, true).await.1;
+    assert_eq!(
+        full["capacity"],
+        json!({"limit":16,"used":16,"available":0})
+    );
+    assert_eq!(full["records"].as_array().unwrap().len(), 16);
+    h.call(
+        17,
+        "api/batch-submit",
+        Some(batch("capacity-rejected", "candy", 1)),
+    )
+    .await;
+    assert_eq!(h.result(17, "", false, true).await.0, 409);
+    assert!(!h.jobs.contains_key("batches/capacity-rejected"));
+    h.call(19, "api/batch-stop", Some(json!({"id":"capacity-b"})))
+        .await;
+    assert_eq!(h.result(19, "", false, true).await.0, 200);
+    h.call(21, "api/tasks", None).await;
+    assert_eq!(
+        h.result(21, "", false, true).await.1["capacity"],
+        json!({"limit":16,"used":11,"available":5})
+    );
+    assert_eq!(h.executes, 0);
+    h.shutdown().await;
+}
+#[tokio::test]
 async fn ciallo_sends_one_plain_message_and_requires_a_complete_text_response() {
     let mut h = Host::start().await;
     let probe = |id, repeats| {
