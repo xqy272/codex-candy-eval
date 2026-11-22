@@ -94,8 +94,9 @@ async function mock(
               return encode({ models: ['gpt-test', 'other-model'] })
             case 'api/tasks': {
               if (state.failPoll) return encode({ error: { message: '模拟轮询中断' } }, 502)
-              const used = state.rows.filter((r: any) => !['completed', 'stopped'].includes(r.status)).length
-              const reply = encode({ records: state.rows, capacity: { limit: 16, used, available: Math.max(0, 16 - used) } })
+              const used = state.rows.filter((r: any) => !['completed', 'stopped', 'paused'].includes(r.status)).length
+              const paused = state.rows.filter((r: any) => r.status === 'paused').length
+              const reply = encode({ records: state.rows, capacity: { limit: 16, used, available: Math.max(0, 16 - used), paused } })
               state.taskReadsInFlight = (state.taskReadsInFlight ?? 0) + 1
               state.peakTaskReads = Math.max(state.peakTaskReads ?? 0, state.taskReadsInFlight)
               if (state.taskReadDelayMs) await new Promise(resolve => setTimeout(resolve, state.taskReadDelayMs))
@@ -219,6 +220,9 @@ async function mock(
             }
             case 'api/resume': {
               const r = state.rows.find((r: any) => r.id === d.id)
+              const used = state.rows.filter((r: any) => !['completed', 'stopped', 'paused'].includes(r.status)).length
+              if (r.status === 'paused' && used >= 16)
+                return encode({ error: { message: '队列名额不足，请等待已有检测结束后再补测' } }, 409)
               r.status = 'queued'
               r.canResume = false
               save()
@@ -282,20 +286,24 @@ const start = (page: Page) => page.getByRole('button', { name: /^(开始检测|�
 const calls = (page: Page) => page.evaluate(() => (window as any).__requests)
 const submissions = async (page: Page) => (await calls(page)).filter((r: any) => r.path === 'api/batch-submit')
 const openAccount = (page: Page, name = '测试账号 A') => page.locator('.desktop-results').getByRole('button', { name: '查看 ' + name + ' 结果', exact: true }).click()
-const closeResult = (page: Page) => page.getByRole('button', { name: '关闭结果', exact: true }).click()
+const closeResult = async (page: Page) => {
+  const dialog = page.getByRole('dialog', { name: '检测结果', exact: true })
+  await dialog.getByRole('button', { name: '关闭结果', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+}
 const taskReads = async (page: Page) => (await calls(page)).filter((r: any) => r.path === 'api/tasks').length
 const synchronize = (page: Page) => page.evaluate(() => window.dispatchEvent(new Event('focus')))
-async function occupyQueue(page: Page, count: number) {
-  await page.evaluate(count => {
+async function occupyQueue(page: Page, count: number, status = 'queued') {
+  await page.evaluate(({ count, status }) => {
     const state = (window as any).__fixture
     state.rows = Array.from({ length: count }, (_, n) => ({
       id: 'occupied-' + n, accountId: 'a1', kind: 'candy', task: true, model: 'gpt-test', effort: '',
-      status: 'paused', reason: 'uncertain', startedAt: Date.now(), durationMs: 0, samples: [], attribution: null,
+      status, reason: status === 'paused' ? 'uncertain' : null, startedAt: Date.now(), durationMs: 0, samples: [], attribution: null,
     }))
-  }, count)
+  }, { count, status })
 }
 
-test('queue allowance distinguishes fingerprint samples from repeated candy and counts paused work', async ({ page }) => {
+test('queue allowance distinguishes fingerprint samples from repeated candy and counts queued work', async ({ page }) => {
   await mock(page)
   await prepare(page, '模型指纹', true)
   await expect(page.getByLabel('队列余量', { exact: true })).toHaveText('剩余 16 / 16 个任务名额 · 本次需要 2 个')
@@ -307,10 +315,66 @@ test('queue allowance distinguishes fingerprint samples from repeated candy and 
   await choose(page, '每账号次数', '5 次')
   await expect(page.getByLabel('队列余量', { exact: true })).toHaveText('剩余 6 / 16 个任务名额 · 本次需要 10 个')
   await expect(page.locator('.start-button')).toBeDisabled()
-  await expect(page.getByText('队列名额不足，请减少账号或次数，或先处理未结束检测', { exact: true })).toBeVisible()
+  await expect(page.getByText('队列名额不足，请减少账号或次数，或等待正在检测的任务结束', { exact: true })).toBeVisible()
   await choose(page, '每账号次数', '3 次')
   await expect(page.locator('.start-button')).toBeEnabled()
   expect(await submissions(page)).toHaveLength(0)
+})
+
+test('nine old incomplete records leave all places free for an eight-account batch', async ({ page }) => {
+  const accounts = Array.from({ length: 8 }, (_, n) => ({ account_id: 'a' + (n + 1), name: '测试账号 ' + 'ABCDEFGH'[n], email: null, enabled: true }))
+  await mock(page, { accounts })
+  await prepare(page, 'Ciallo')
+  await occupyQueue(page, 9, 'paused')
+  await synchronize(page)
+  await page.getByRole('button', { name: '选择筛选结果', exact: true }).click()
+  await choose(page, '并行账号数', '4 个')
+  await expect(page.getByLabel('队列余量', { exact: true })).toHaveText('剩余 16 / 16 个任务名额 · 本次需要 8 个')
+  await expect(page.getByLabel('未完成检测', { exact: true })).toHaveText('另有 9 个未完成检测，记录已保留，不占队列名额')
+  await expect(page.locator('.start-button')).toBeEnabled()
+  const before = await page.evaluate(() => JSON.stringify((window as any).__fixture.rows))
+  await start(page)
+  await expect(page.getByText('全部完成 · 完成 8 / 8 个账号', { exact: false })).toBeVisible()
+  expect(await submissions(page)).toHaveLength(1)
+  expect((await submissions(page))[0].data.accountIds).toHaveLength(8)
+  expect(await page.evaluate(() => JSON.stringify((window as any).__fixture.rows.filter((r: any) => r.id.startsWith('occupied-'))))).toBe(before)
+  expect((await calls(page)).filter((r: any) => r.path === 'api/resume')).toHaveLength(0)
+})
+
+test('an entirely paused batch still offers a batch-wide stop and keeps its attempts', async ({ page }) => {
+  await mock(page, { paused: true })
+  await prepare(page, '模型指纹', true)
+  await start(page)
+  await expect(page.getByRole('button', { name: '停止本批次', exact: true })).toBeVisible()
+  await expect(page.getByLabel('未完成检测', { exact: true })).toContainText('另有 2 个未完成检测')
+  await page.getByRole('button', { name: '停止本批次', exact: true }).click()
+  await expect(page.getByRole('button', { name: '停止本批次', exact: true })).toHaveCount(0)
+  expect(await page.evaluate(() => (window as any).__fixture.rows.every((r: any) => r.status === 'stopped' && r.attempts.length === 1))).toBe(true)
+  expect((await calls(page)).filter((r: any) => r.path === 'api/batch-stop')).toHaveLength(1)
+  expect((await calls(page)).filter((r: any) => r.path === 'api/resume')).toHaveLength(0)
+})
+
+test('paused resumption refuses a full active queue without losing its saved answer', async ({ page }) => {
+  await mock(page, { paused: true })
+  await prepare(page)
+  await start(page)
+  await page.evaluate(() => {
+    const state = (window as any).__fixture
+    const saved = state.rows[0]
+    for (let n = 0; n < 16; n++) state.rows.push({ ...saved, id: 'active-' + n, batchId: undefined, status: 'queued', canResume: false, attempts: [] })
+  })
+  await synchronize(page)
+  await expect(page.getByLabel('队列余量', { exact: true })).toContainText('剩余 0 / 16')
+  await page.getByRole('button', { name: '补测 2 个样本', exact: true }).click()
+  await expect(page.getByText('队列名额不足，请等待已有检测结束后再补测', { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => (window as any).__fixture.rows[0].status)).toBe('paused')
+  await expect(page.getByLabel('实际回答', { exact: true })).toContainText('1, 2, 3')
+  await page.evaluate(() => (window as any).__fixture.rows.filter((r: any) => r.id.startsWith('active-')).forEach((r: any) => { r.status = 'stopped' }))
+  await synchronize(page)
+  await expect(page.getByLabel('队列余量', { exact: true })).toContainText('剩余 16 / 16')
+  await page.getByRole('button', { name: '补测 2 个样本', exact: true }).click()
+  await expect(page.getByLabel('队列余量', { exact: true })).toContainText('剩余 15 / 16')
+  expect(await submissions(page)).toHaveLength(1)
 })
 
 test('submission rechecks stale queue allowance before creating an intent', async ({ page }) => {

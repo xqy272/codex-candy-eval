@@ -1,0 +1,17 @@
+{
+  "checks": [
+    "Released 1.4.4 reproduces nine paused records, zero active work, seven free places and rejection of eight new accounts",
+    "Same-instance 1.4.4 to final 1.4.5 preserves every record, private draft, frozen plan and sample while immediately releasing the nine paused places without replay",
+    "Final archive completes two-account candy on official CPR 3.53.1",
+    "Final archive completes two-account fingerprint on official CPR 3.53.1",
+    "Final archive completes two-account pelican on official CPR 3.53.1",
+    "New incomplete Ciallo releases its queue places and keeps its saved replies available for manual resumption",
+    "A real full queue rejects paused resumption without changing its saved task or sample",
+    "After space is released, explicit resumption reuses the frozen plan, adds one controlled attempt and retains the original answer; the uncertain fingerprint is never replayed"
+  ],
+  "realModelRequests": 0,
+  "observedAtUtc": "2026-11-22T08:33:34.465474+00:00",
+  "archiveSha256": "d3f402e5e47d1ae3a078f88759397c1454a7691d667e8c91f1d0c64dd36f3fc7",
+  "hostVersion": "3.53.1",
+  "hostBinarySha256": "ccbe7d37b9ab42599119353c5f39569a55b065877af43824ab9bf964244ecf77"
+}

@@ -27,7 +27,12 @@ const MAX_ATTEMPTS: usize = 9;
 const SAMPLE_BUDGET: u64 = 12_000_000;
 fn pending_count(rows: &[Value]) -> usize {
     rows.iter()
-        .filter(|r| !matches!(r["status"].as_str(), Some("completed" | "stopped")))
+        .filter(|r| {
+            !matches!(
+                r["status"].as_str(),
+                Some("completed" | "stopped" | "paused")
+            )
+        })
         .count()
 }
 fn now() -> u64 {
@@ -161,7 +166,7 @@ pub async fn submit_batch(
         if pending_count(&rows) + task_count > MAX_PENDING {
             return Err(PluginFault::new(
                 ErrorCode::Capacity,
-                "未结束检测最多 16 份，请减少账号或次数，或先处理已有检测",
+                "排队和执行中的检测最多 16 份，请减少账号或次数，或等待已有检测结束",
             ));
         }
         let mut ids = get(host, "batches", "index")
@@ -555,11 +560,12 @@ pub async fn has_pending(host: &HostClient) -> Result<bool, PluginFault> {
 pub async fn list(state: &AppState, host: &HostClient) -> Result<Value, PluginFault> {
     let mut rows = index(host).await?.0;
     let used = pending_count(&rows);
+    let paused = rows.iter().filter(|r| r["status"] == "paused").count();
     for r in &mut rows {
         observe(state, r)?;
     }
     Ok(
-        json!({"records":rows,"capacity":{"limit":MAX_PENDING,"used":used,"available":MAX_PENDING.saturating_sub(used)}}),
+        json!({"records":rows,"capacity":{"limit":MAX_PENDING,"used":used,"available":MAX_PENDING.saturating_sub(used),"paused":paused}}),
     )
 }
 async fn remove(host: &HostClient, id: &str) -> Result<(), PluginFault> {
@@ -617,7 +623,10 @@ pub async fn submit(
         return Ok(json!({"record":job.record(),"duplicate":true}));
     }
     if pending_count(&index(host).await?.0) >= MAX_PENDING {
-        return Err(PluginFault::new(ErrorCode::Capacity, "待处理任务已达上限"));
+        return Err(PluginFault::new(
+            ErrorCode::Capacity,
+            "排队和执行中的检测已达上限",
+        ));
     }
     prune(host).await?;
     let job = new_job(state, host, req, None, None).await?;
@@ -779,6 +788,12 @@ pub async fn action(
             }
             if job.status != "paused" || job.attempts.len() >= MAX_ATTEMPTS {
                 return Err(conflict("该任务不能继续，请新建检测"));
+            }
+            if pending_count(&index(host).await?.0) >= MAX_PENDING {
+                return Err(PluginFault::new(
+                    ErrorCode::Capacity,
+                    "队列名额不足，请等待已有检测结束后再补测",
+                ));
             }
             let src = source()?;
             if job.detector_revision != src["detectorRevision"] || job.source_hashes != hashes(&src)

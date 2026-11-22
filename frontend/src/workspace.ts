@@ -199,7 +199,7 @@ export function workspace() {
     if (!selected.value.length) return '请选择至少一个可用账号'
     if (selected.value.length > 16) return '每批次最多选择 16 个账号'
     if (!queueCapacity.value) return '尚未取得队列余量，请重新读取'
-    if (queueExceeded.value) return '队列名额不足，请减少账号或次数，或先处理未结束检测'
+    if (queueExceeded.value) return '队列名额不足，请减少账号或次数，或等待正在检测的任务结束'
     return ''
   })
   const ready = computed(() => !readinessReason.value)

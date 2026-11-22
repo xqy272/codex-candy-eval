@@ -1,3 +1,25 @@
+# 1.4.5 暂停记录释放队列与原实例升级
+
+使用官方 CPR 3.53.1 创建下方说明的全新临时数据库和受控上游，不注册宿主切换目标。准备已发布的 1.4.4 和最终 1.4.5 归档，按顺序执行：
+
+```bash
+python3 integration/native_client.py --baseline dist/cloudops.codex-candy-eval-1.4.4-x86_64-unknown-linux-gnu.tar.gz
+python3 integration/paused-queue.py seed
+node integration/paused-queue-browser.mjs before
+python3 integration/paused-queue.py upgrade
+node integration/paused-queue-browser.mjs after
+python3 integration/paused-queue.py business
+python3 integration/paused-queue.py capacity
+```
+
+夹具仅接受本机受控账号 A–H。seed 等待临时模型目录就绪，再写入九条真实暂停任务（含一条未知消费指纹）、旧报告、重复批次和八账号草稿。1.4.4 应显示零活动任务、余量 7/16，并拒绝八账号新批次；before 保存原生截图。upgrade 在原实例切换最终归档，逐项核对记录、草稿、冻结计划及样本，余量应立即变为 16/16，另有九条暂停记录，没有自动重放。
+
+after 从真实页面一次提交原八账号 Ciallo，上游必须恰好收到八个固定单词请求，逐账号核对，全部旧任务仍原样。随后从记录打开整批暂停总览，验证整批停止入口和八条样本保留，并检查 390/320px 与刷新恢复。business 再回归双账号糖果、完整指纹、SVG 和不完整 Ciallo；capacity 排入十六个受控慢任务，核对满队列拒绝补测且不改写旧样本，停止后仅由明确恢复操作补一次。未知消费指纹在整个环境中必须始终只有一次上游请求。
+
+证据在 `.runtime/integration/paused145-native.json`、`paused145-ui-before.json`、`paused145-ui-after.json` 和 `paused145-ui/`。结束前保存 cleanup-target.json 的本次临时目录与四个端口，创建 stop，等待 run_host.py 退出，再运行 cleanup-ui.py。只保留脱敏记录和受控截图，不复制控制凭据。
+
+---
+
 # 1.4.4 队列余量、轮询与 CPR 3.53.1
 
 准备已发布的 1.4.3 和最终 1.4.4 归档。按下方 run_host.py 的数据库工具参数，用校验过官方摘要的 CPR 3.43.1 启动全新临时环境，并将官方 3.53.1 注册为唯一 `--matrix-cpr-dir`。按顺序执行，不并行业务与原生浏览器检查：

@@ -1,0 +1,44 @@
+{
+  "before": {
+    "stage": "before",
+    "archiveSha256": "5cac903df721b2923c3b3e4eb9ce8e1ef627506389dbba05e7d511205a757fbf",
+    "checks": [
+      "Released 1.4.4 visibly blocks eight accounts with seven free places despite no active work",
+      "The reproduced old screen has no queued, running or scoring tasks",
+      "Viewing the reproduced old state sends no model requests",
+      "The native page produces no JavaScript errors"
+    ],
+    "controlledUiCalls": 0,
+    "realModelRequests": 0,
+    "javascriptErrors": []
+  },
+  "after": {
+    "stage": "after",
+    "archiveSha256": "d3f402e5e47d1ae3a078f88759397c1454a7691d667e8c91f1d0c64dd36f3fc7",
+    "checks": [
+      "Final 1.4.5 restores all sixteen places and allows the same eight selected accounts",
+      "The native page explains that nine saved incomplete records do not occupy the queue",
+      "One click completes exactly eight pinned Ciallo requests, one per controlled account",
+      "Original paused task 1 remains unchanged after the new batch",
+      "Original paused task 2 remains unchanged after the new batch",
+      "Original paused task 3 remains unchanged after the new batch",
+      "Original paused task 4 remains unchanged after the new batch",
+      "Original paused task 5 remains unchanged after the new batch",
+      "Original paused task 6 remains unchanged after the new batch",
+      "Original paused task 7 remains unchanged after the new batch",
+      "Original paused task 8 remains unchanged after the new batch",
+      "Original paused task 9 remains unchanged after the new batch",
+      "The uncertain fingerprint is never automatically replayed",
+      "An entirely paused old batch exposes the native batch-wide stop control",
+      "The native batch-wide stop covers all eight paused account tasks",
+      "Stopping the paused batch preserves every original stored answer",
+      "Queue allowance and saved-incomplete notice fit the 390px native viewport",
+      "Queue allowance and saved-incomplete notice fit the 320px native viewport",
+      "Reload restores the new batch with no extra model requests",
+      "The native page produces no JavaScript errors"
+    ],
+    "controlledUiCalls": 8,
+    "realModelRequests": 0,
+    "javascriptErrors": []
+  }
+}

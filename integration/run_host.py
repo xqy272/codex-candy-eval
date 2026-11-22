@@ -63,7 +63,7 @@ class Mock(http.server.BaseHTTPRequestHandler):
     calls=[];lock=threading.Lock();closed=0;active=0;peak=0;per_account={};account_peak={}
     def do_POST(self):
         alias=self.headers.get("Authorization", "").rsplit("-",1)[-1].upper()
-        if alias not in list("ABCDEF"):raise ValueError("Only controlled fixture credentials are accepted")
+        if alias not in list("ABCDEFGH"):raise ValueError("Only controlled fixture credentials are accepted")
         with self.lock:
             type(self).active+=1;type(self).peak=max(self.peak,self.active);self.per_account[alias]=self.per_account.get(alias,0)+1;self.account_peak[alias]=max(self.account_peak.get(alias,0),self.per_account[alias])
         self.observation={"account":alias,"start":time.monotonic(),"model":""}

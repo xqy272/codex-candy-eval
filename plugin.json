@@ -3,7 +3,7 @@
   "name": "codex-candy-eval",
   "publisher": "cloudops",
   "displayName": "模型测试",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "糖果题、模型指纹、画鹈鹕和 Ciallo 测试",
   "license": "MIT",
   "engines": {

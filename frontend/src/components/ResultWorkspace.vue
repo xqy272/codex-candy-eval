@@ -29,7 +29,7 @@ const keyLabel = computed(() => {
       <div class="current-batch">
         <div><h2>本批次 · {{ kinds.find((k) => k.value === w.currentBatch?.request.kind)?.label }}</h2>
           <div class="batch-status-line muted"><span>{{ w.batchStatus(w.currentBatch) }} · 完成 {{ w.completedAccounts.length }} / {{ w.batchAccounts.length }} 个账号<span v-if="w.waitingAccounts.length"> · {{ w.waitingAccounts.length }} 个等待处理</span></span><span v-if="batchTime" class="batch-time">{{ batchTime.label }} <ResultTimestamp :value="batchTime.value" /></span></div></div>
-        <ZButton v-if="w.running || !w.currentBatch.ready" size="small" :disabled="w.busy" @click="w.stopBatch">停止本批次</ZButton>
+        <ZButton v-if="w.running || w.waitingAccounts.length || !w.currentBatch.ready" size="small" :disabled="w.busy" @click="w.stopBatch">停止本批次</ZButton>
       </div>
       <div class="frozen-conditions" aria-label="本批次冻结条件">
         <span class="muted">冻结条件</span>

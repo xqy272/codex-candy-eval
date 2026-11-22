@@ -985,23 +985,22 @@ fn batch(id: &str, kind: &str, repeats: usize) -> Value {
     json!({"id":id,"accountIds":["account-test"],"clientKeyId":"key-test","model":"gpt-test","effort":"","kind":kind,"profile":"simple-v1","repeats":repeats,"concurrency":2,"outputVersion":"svg-v1"})
 }
 #[tokio::test]
-async fn queue_capacity_matches_admission_including_pauses_and_idempotent_retries() {
+async fn queue_capacity_matches_active_admission_and_idempotent_retries() {
     let mut h = Host::start().await;
     h.call(1, "api/tasks", None).await;
     assert_eq!(
         h.result(1, "", false, true).await.1["capacity"],
-        json!({"limit":16,"used":0,"available":16})
+        json!({"limit":16,"used":0,"available":16,"paused":0})
     );
     for (id, name) in [(3, "capacity-a"), (5, "capacity-b"), (7, "capacity-c")] {
         h.call(id, "api/batch-submit", Some(batch(name, "candy", 5)))
             .await;
         assert_eq!(h.result(id, "", false, true).await.0, 200);
     }
-    h.jobs.get_mut("queue/index").unwrap().0["records"][0]["status"] = json!("paused");
     h.call(9, "api/tasks", None).await;
     assert_eq!(
         h.result(9, "", false, true).await.1["capacity"],
-        json!({"limit":16,"used":15,"available":1})
+        json!({"limit":16,"used":15,"available":1,"paused":0})
     );
     let fingerprint = batch("capacity-fingerprint", "fingerprint", 1);
     for id in [11, 13] {
@@ -1013,7 +1012,7 @@ async fn queue_capacity_matches_admission_including_pauses_and_idempotent_retrie
     let full = h.result(15, "", false, true).await.1;
     assert_eq!(
         full["capacity"],
-        json!({"limit":16,"used":16,"available":0})
+        json!({"limit":16,"used":16,"available":0,"paused":0})
     );
     assert_eq!(full["records"].as_array().unwrap().len(), 16);
     h.call(
@@ -1030,9 +1029,104 @@ async fn queue_capacity_matches_admission_including_pauses_and_idempotent_retrie
     h.call(21, "api/tasks", None).await;
     assert_eq!(
         h.result(21, "", false, true).await.1["capacity"],
-        json!({"limit":16,"used":11,"available":5})
+        json!({"limit":16,"used":11,"available":5,"paused":0})
     );
     assert_eq!(h.executes, 0);
+    h.shutdown().await;
+}
+#[tokio::test]
+async fn nine_paused_records_release_capacity_without_replay_or_data_changes() {
+    let mut h = Host::start().await;
+    for n in 0..9 {
+        let id = 1 + n * 2;
+        h.call(
+            id,
+            "api/submit",
+            Some(run(&format!("paused-{n}"), "fingerprint")),
+        )
+        .await;
+        assert_eq!(h.result(id, "", true, true).await.0, 200);
+    }
+    h.maintenance(21, 630000).await;
+    h.result(21, "21", true, true).await;
+    assert_eq!(h.executes, 9);
+    let saved: Vec<_> = (0..9)
+        .map(|n| h.jobs[&format!("tasks/paused-{n}")].0.clone())
+        .collect();
+    assert!(saved.iter().all(|job| job["status"] == "paused"));
+    h.call(23, "api/tasks", None).await;
+    assert_eq!(
+        h.result(23, "", false, true).await.1["capacity"],
+        json!({"limit":16,"used":0,"available":16,"paused":9})
+    );
+    for (id, name, repeats) in [(25, "new-five", 5), (27, "new-three", 3)] {
+        h.call(id, "api/batch-submit", Some(batch(name, "candy", repeats)))
+            .await;
+        assert_eq!(h.result(id, "", false, true).await.0, 200);
+    }
+    h.call(29, "api/tasks", None).await;
+    assert_eq!(
+        h.result(29, "", false, true).await.1["capacity"],
+        json!({"limit":16,"used":8,"available":8,"paused":9})
+    );
+    h.maintenance(31, 630000).await;
+    h.result(31, "21", true, true).await;
+    assert_eq!(h.executes, 17);
+    for (n, job) in saved.iter().enumerate() {
+        assert_eq!(&h.jobs[&format!("tasks/paused-{n}")].0, job);
+    }
+    h.shutdown().await;
+}
+#[tokio::test]
+async fn paused_resume_reacquires_capacity_and_rejection_keeps_saved_evidence() {
+    let mut h = Host::start().await;
+    h.call(1, "api/submit", Some(run("resume-capacity", "fingerprint")))
+        .await;
+    h.result(1, "", true, true).await;
+    h.maintenance(3, 630000).await;
+    h.result(3, "21", true, true).await;
+    let saved = h.jobs["tasks/resume-capacity"].0.clone();
+    assert_eq!(saved["status"], "paused");
+    for (id, name, repeats) in [
+        (5, "full-a", 5),
+        (7, "full-b", 5),
+        (9, "full-c", 5),
+        (11, "full-d", 1),
+    ] {
+        h.call(id, "api/batch-submit", Some(batch(name, "candy", repeats)))
+            .await;
+        assert_eq!(h.result(id, "", false, true).await.0, 200);
+    }
+    h.call(13, "api/resume", Some(json!({"id":"resume-capacity"})))
+        .await;
+    assert_eq!(h.result(13, "", false, true).await.0, 409);
+    assert_eq!(h.jobs["tasks/resume-capacity"].0, saved);
+    assert_eq!(h.executes, 1);
+    h.call(15, "api/batch-stop", Some(json!({"id":"full-b"})))
+        .await;
+    assert_eq!(h.result(15, "", false, true).await.0, 200);
+    h.call(17, "api/resume", Some(json!({"id":"resume-capacity"})))
+        .await;
+    assert_eq!(h.result(17, "", false, true).await.0, 200);
+    let resumed = h.jobs["tasks/resume-capacity"].0.clone();
+    assert_eq!(resumed["status"], "queued");
+    assert_eq!(resumed["plan"], saved["plan"]);
+    assert_eq!(resumed["attempts"], saved["attempts"]);
+    h.call(19, "api/tasks", None).await;
+    assert_eq!(
+        h.result(19, "", false, true).await.1["capacity"],
+        json!({"limit":16,"used":12,"available":4,"paused":0})
+    );
+    for (id, name, repeats) in [(21, "fill-three", 3), (23, "fill-one", 1)] {
+        h.call(id, "api/batch-submit", Some(batch(name, "candy", repeats)))
+            .await;
+        assert_eq!(h.result(id, "", false, true).await.0, 200);
+    }
+    h.call(25, "api/resume", Some(json!({"id":"resume-capacity"})))
+        .await;
+    assert_eq!(h.result(25, "", false, true).await.0, 200);
+    assert_eq!(h.jobs["tasks/resume-capacity"].0, resumed);
+    assert_eq!(h.executes, 1);
     h.shutdown().await;
 }
 #[tokio::test]

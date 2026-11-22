@@ -67,6 +67,7 @@ export interface QueueCapacity {
   limit: number
   used: number
   available: number
+  paused?: number
 }
 export interface Sample {
   valid?: boolean

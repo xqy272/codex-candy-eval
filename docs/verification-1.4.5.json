@@ -1,0 +1,56 @@
+{
+  "observedAtUtc": "2026-11-22T08:34:56.819585+00:00",
+  "version": "1.4.5",
+  "baseCommit": "5ec79e27cd0b052deae5d8498990d6ad06d35482",
+  "archive": {
+    "archiveSha256": "d3f402e5e47d1ae3a078f88759397c1454a7691d667e8c91f1d0c64dd36f3fc7",
+    "bytes": 6949665,
+    "files": 22,
+    "resources": 20,
+    "binarySha256": "8d106df5615f760bd1716a13cbf4f2cbe13ef4e987401dc8c369d7a6871e535f",
+    "maximumGlibc": "GLIBC_2.28",
+    "stateDeclarationsUnchanged": true,
+    "allDeclaredResourceBytesMatch": true,
+    "declaredHostRange": ">=3.53.1, <3.54.0",
+    "packagingCliSource": "zyycn/codex-proxy-rs v3.53.1 original workspace, --locked"
+  },
+  "rustTestsPassed": 41,
+  "rustFmt": true,
+  "allTargetsClippyWarningsDenied": true,
+  "fixedSourcesVerified": 92,
+  "frontendProductionBuild": true,
+  "uiTestsPassed": 49,
+  "nativeBusinessChecksPassed": 8,
+  "nativeUiChecksPassed": {
+    "releasedBaseline": 4,
+    "finalPackage": 20
+  },
+  "nativeHosts": [
+    {
+      "version": "3.53.1",
+      "binarySha256": "ccbe7d37b9ab42599119353c5f39569a55b065877af43824ab9bf964244ecf77"
+    }
+  ],
+  "upgradeBaseline": {
+    "pluginVersion": "1.4.4",
+    "originalInstancePreserved": true,
+    "pausedRecordsPreserved": 9
+  },
+  "controlledRequestsFinalEnvironment": 37,
+  "realModelRequests": 0,
+  "productionInspected": false,
+  "productionModified": false,
+  "evidence": [
+    "native-ui-business-1.4.5.json",
+    "native-ui-1.4.5.json",
+    "final-audit-1.4.5.json",
+    "credentials-cleanup-1.4.5.json"
+  ],
+  "notes": [
+    "The released 1.4.4 package reproduced zero active tasks, nine paused records and rejection of eight accounts with seven available places.",
+    "The final 1.4.5 package kept the same nine records and immediately returned sixteen available places; the native page sent exactly eight new Ciallo requests.",
+    "An existing history-return test timed out before its close helper awaited dialog removal; ten targeted repetitions and the final full 49-test run passed. Product navigation code was unchanged.",
+    "Only official CPR 3.53.1 ran this final artifact. The compatibility declaration was not widened.",
+    "All requests used loopback fixtures and cannot establish model identity or accuracy."
+  ]
+}
