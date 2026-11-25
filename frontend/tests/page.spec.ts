@@ -91,7 +91,7 @@ async function mock(
                 keys: o.empty ? [] : (o.keys ?? [{ id: 'k1', name: 'personal-codex', enabled: true }]),
               })
             case 'api/models':
-              return encode({ models: ['gpt-test', 'other-model'] })
+              return encode({ models: ['gpt-test', 'other-model', 'gpt-6.2-sol', 'gpt-6.2-astra'] })
             case 'api/tasks': {
               if (state.failPoll) return encode({ error: { message: '模拟轮询中断' } }, 502)
               const used = state.rows.filter((r: any) => !['completed', 'stopped', 'paused'].includes(r.status)).length
@@ -197,14 +197,14 @@ async function mock(
               return encode({ record: state.rows.find((r: any) => r.id === d.id) })
             case 'api/sample': {
               const r = state.rows.find((r: any) => r.id === d.id)
-              const text =
+              const text = o.responseText ?? (
                 r.kind === 'pelican'
                   ? o.legacy
                     ? '<html><body>旧版动画原文</body></html>'
                     : '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><defs><linearGradient id="paint"><stop stop-color="#e6edf4"/></linearGradient></defs><rect width="360" height="200" fill="url(#paint)"/><text x="20" y="90">Pelican</text><script>parent.__unsafe=true</script><image href="https://example.invalid/leak"/></svg>'
                   : r.kind === 'candy'
-                    ? o.responseText ?? '22'
-                    : r.kind === 'ciallo' ? '你好，今天有什么可以帮你？' : '1, 2, 3'
+                    ? '22'
+                    : r.kind === 'ciallo' ? '你好，今天有什么可以帮你？' : '1, 2, 3')
               return encode({
                 sample: {
                   step: 0,
@@ -702,6 +702,47 @@ test('safe SVG previews keep internal gradients, code and downloadable output', 
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: '下载 SVG' }).click()
   expect((await download).suggestedFilename()).toMatch(/\.svg$/)
+})
+
+test('the new drawing prompt uses svg-v2 and preview renders both locally reused wheels', async ({ page }) => {
+  await mock(page, {
+    responseText: 'Here is the illustration.\n\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="200" height="100">'
+      + '<defs><circle id="wheel" r="12" fill="#181818"/></defs>'
+      + '<use href="#wheel" x="40" y="60"/><use xlink:href="#wheel" x="160" y="60"/>'
+      + '<use href="https://example.invalid/wheel.svg#wheel"/><use href="other.svg#wheel"/></svg>\n\nIt is ready.',
+  })
+  await prepare(page, '画鹈鹕')
+  await start(page)
+  expect((await submissions(page))[0].data.outputVersion).toBe('svg-v2')
+  await expect(page.getByLabel('请求概况')).toContainText('经典 SVG（原题）')
+  const image = page.getByAltText('鹈鹕绘图预览')
+  const svg = decodeURIComponent((await image.getAttribute('src'))!)
+  expect(svg).toContain('href="#wheel"')
+  expect(svg).toContain('xlink:href="#wheel"')
+  expect(svg).not.toMatch(/example\.invalid|other\.svg/)
+  expect(await image.evaluate(async (img: HTMLImageElement) => {
+    await img.decode()
+    const canvas = document.createElement('canvas')
+    canvas.width = 200
+    canvas.height = 100
+    const ctx = canvas.getContext('2d')!
+    ctx.drawImage(img, 0, 0)
+    return [40, 160].map(x => ctx.getImageData(x, 60, 1, 1).data[3])
+  })).toEqual([255, 255])
+})
+
+test('GPT-6.2 accepts a compatible effort and leaves an incompatible draft unsubmitted', async ({ page }) => {
+  await mock(page)
+  await prepare(page, '糖果题')
+  await choose(page, '推理强度', 'minimal')
+  await choose(page, '模型', 'gpt-6.2-sol')
+  await expect(page.getByText('当前推理强度与所选模型不兼容，请重新选择')).toBeVisible()
+  await expect(page.getByRole('button', { name: /^开始检测/ })).toBeDisabled()
+  await expect.poll(() => submissions(page)).toHaveLength(0)
+  await choose(page, '推理强度', 'low')
+  await choose(page, '模型', 'gpt-6.2-astra')
+  await start(page)
+  expect((await submissions(page))[0].data).toMatchObject({ model: 'gpt-6.2-astra', effort: 'low' })
 })
 
 test('third comparison requires explicit replacement and cancel preserves A/B', async ({ page }) => {

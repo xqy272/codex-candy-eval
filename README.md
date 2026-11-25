@@ -1,16 +1,16 @@
 # codex-candy-eval
 
-CPR 原生模型测试插件，版本 **1.4.5**。使用 CPR 官方 UI 组件，随宿主主题同步配色、字体、圆角和控件密度。提供糖果题、模型指纹、画鹈鹕和 Ciallo 响应测试。开始前显示队列任务余量，暂停记录保留且不占队列名额，页面按活动情况调整刷新频率。选择账号后提交一个批次，离开页面后由 CPR 继续执行。Linux x86_64 安装包包含程序、管理页、字体和固定检测资源，无需独立服务。
+CPR 原生模型测试插件，版本 **1.4.6**。使用 CPR 官方 UI 组件，随宿主主题同步配色、字体、圆角和控件密度。提供糖果题、模型指纹、画鹈鹕和 Ciallo 响应测试。开始前显示队列任务余量，暂停记录保留且不占队列名额，页面按活动情况调整刷新频率。选择账号后提交一个批次，离开页面后由 CPR 继续执行。Linux x86_64 安装包包含程序、管理页、字体和固定检测资源，无需独立服务。
 
 ## 安装与升级
 
-本版修复旧的“未完成”记录一直占据队列、阻止新检测的问题；整批等待处理时也可以直接停止本批次。
+本版更新模型指纹库与评分器，收录 GPT-6.2 Sol 和 Astra。画鹈鹕默认使用经典 SVG 原题，并支持预览里复用同一份 SVG 图形。
 
-本版构建文件为 `dist/cloudops.codex-candy-eval-1.4.5-x86_64-unknown-linux-gnu.tar.gz` 及同名 `.sha256`。从 [v1.4.5 Release](https://github.com/xqy272/codex-candy-eval/releases/tag/v1.4.5) 下载后，上传至 CPR 插件管理并核对摘要，打开“模型测试”。
+本版构建文件为 `dist/cloudops.codex-candy-eval-1.4.6-x86_64-unknown-linux-gnu.tar.gz` 及同名 `.sha256`。从发布页下载后，上传至 CPR 插件管理并核对摘要，打开“模型测试”。 [v1.4.6 Release](https://github.com/xqy272/codex-candy-eval/releases/tag/v1.4.6)
 
-要求 Linux x86_64、glibc 2.28+。宿主声明为 `>=3.53.1, <3.54.0`，组件对齐 CPR 3.53.1 的 UI 0.12.0；实际验收版本及旧实例升级路径见 [验收记录](docs/verification.md)。遮罩覆盖插件页面，弹窗面板随宿主可见区域调整。旧宿主保留使用此前适配版本。
+要求 Linux x86_64、glibc 2.28+。宿主声明为 `>=3.53.1, <3.61.0`，按自用需求放行至 3.60.x。组件对齐 CPR 3.54.5 的 UI 0.13.1。实际验收版本及原实例升级路径见 [验收记录](docs/verification.md)。遮罩覆盖插件页面，弹窗面板随宿主可见区域调整。
 
-已有用户在**原实例切换版本**，保留插件 ID `cloudops.codex-candy-eval`，不要删除实例或清空私有状态。升级前结束活动请求，备份数据库与应用数据，并按宿主提示检查清单。1.4.5 全部私有状态声明与 1.4.4 相同，无需新增迁移。已有报告、暂停任务、冻结题目及样本继续可读；升级后重新计算队列余量，不删除或自动重发旧的未完成记录。旧同步记录与旧独立任务继续在“记录”查看。
+已有用户在**原实例切换版本**，保留插件 ID `cloudops.codex-candy-eval`。升级前结束活动请求，备份数据库与应用数据，并按宿主提示检查清单。已有报告、暂停任务、冻结题目及样本继续可读。旧版指纹补测需要新建批次，其他测试按原条件恢复。旧同步记录与旧独立任务继续在“记录”查看。
 
 需要退回旧版时，停止任务并使用升级前成套备份；跨版本原地降级未经验证。
 
@@ -38,16 +38,16 @@ CPR 原生模型测试插件，版本 **1.4.5**。使用 CPR 官方 UI 组件，
 | --- | --- |
 | 糖果题 | 使用原题，标准答案为独立数字 **21**。展示真实回答和正确/有效次数，执行失败独立计数，不算答错 |
 | 模型指纹 | 固定配套题库抽三题；完整终态及原算法数字校验通过后形成参考库候选排名，概率不代表模型身份证明 |
-| 画鹈鹕 | 默认“标准 SVG v1”，要求完整独立 SVG，直接预览、查看代码、复制、下载；可对比两份已有作品，不自动评分 |
+| 画鹈鹕 | 默认“经典 SVG（原题）”，预览、查看代码、复制、下载，并排对比两份已有作品 |
 | Ciallo | 每账号一个固定用户消息 `ciallo`，没有额外指令或工具。成功终态和非空正文齐全时显示“完整返回”，保留原回答、耗时和用量，不要求复读或判分 |
 
 Ciallo 列表摘要最多保存 512 字节，按两行显示。执行时显示收到的片段，未完整结束的回复会明确标注；原始完整回答保存在样本中，点“查看结果”读取。批次总览不批量加载全文。旧记录缺少可展示字段时保留未知，不重新请求或评分。
 
-旧版 HTML 动画题保留原版本，可显式选择。旧任务续测沿用冻结原题，不把原题悄悄改成 SVG。旧 HTML 或不完整 SVG 无法预览时明确说明“作品已生成但无法预览”，保留原文；不执行模型生成的脚本或请求外部资源。
+默认题面为 `Generate an SVG of a pelican riding a bicycle`。简洁请求只提交这一条用户消息。预览可从代码围栏或说明文字中提取完整 SVG，并保留同一 SVG 内的图形引用。旧版 HTML 动画题可显式选择。旧任务续测沿用冻结题面，不完整 SVG 及旧 HTML 原文可在报告查看。 [经典 SVG 原题](https://github.com/simonw/pelican-bicycle) · [SVG 和 HTML 动画的实现对照](https://pelicanbenchmark.com/methodology)
 
 ## 请求与并行
 
-默认 **简洁请求** `simple-v1`，保留题目所需指令与 user 正文。可显式选择固定 **Codex 上下文 v1**；它包含较长 CLI 指令和工具声明，工具执行关闭，不宣称复制完整真实 Codex 客户端。未指定推理强度时省略该字段，继承宿主/上游默认；界面选项不保证每个模型都支持。
+默认 **简洁请求** `simple-v1`，保留题目所需指令与 user 正文。可显式选择固定 **Codex 上下文 v1**，它包含较长 CLI 指令和工具声明，工具执行关闭。未指定推理强度时省略该字段，继承宿主/上游默认。GPT-6.2 Sol 和 Astra 的界面选项及新提交限制遵循 API 迁移指南，允许默认或 `low` 及以上。 [GPT-6.2 API 指南](https://developers.openai.com/api/docs/guides/latest-model#gpt-6.2-astra-choose-a-reasoning-effort)
 
 实例默认最多同时执行 **2 个不同账号**，可选 1–4；已有活动检测时不能改变全局上限。同一账号跨批次仍最多一个在途请求，账号内指纹样本逐题执行。某个槽位完成后独立保存并补入下一题，不等待其他慢账号。该数值只是插件上限，实际 Key/账号并发、额度、身份、认证与出口仍由 Core 管理。
 
@@ -89,17 +89,17 @@ python scripts/build.py --target x86_64-unknown-linux-gnu
 
 脚本从自身路径定位工程，使用锁文件、验证固定资源，再通过官方 CLI 打包并独立检查。交叉编译需配置目标工具链与链接器。安装包位于 dist，不进入 Git。
 
-1.4.5 发行程序使用 cargo-zigbuild 0.24.1 与 Zig 0.15.2 执行 `cargo +1.99.1 zigbuild --release --locked --manifest-path backend/Cargo.toml --target x86_64-unknown-linux-gnu.2.28`，再由 CPR 3.53.1 源码构建的官方 `cpr-plugin` 打包；已核对最高 GLIBC 符号为 2.28。
+1.4.6 发行程序使用 cargo-zigbuild 0.24.1 与 Zig 0.15.2 执行 `cargo +1.99.1 zigbuild --release --locked --manifest-path backend/Cargo.toml --target x86_64-unknown-linux-gnu.2.28`，再由 CPR 3.54.5 源码构建的官方 `cpr-plugin` 打包。
 
 真实宿主、受控上游和页面测试见 [integration](integration/README.md)，持久化与恢复规则见 [架构说明](docs/architecture.md)，验证范围和边界见 [验收记录](docs/verification.md)。CI 模板在 ci/github-actions.yml，尚未启用。
 
 ## 来源与许可
 
-本项目 [MIT](LICENSE)。92 个固定来源文件及 SHA-256 见 [vendor/SOURCES.json](vendor/SOURCES.json)，许可文本见 licenses。题目与检测器没有在本版静默更新。
+本项目 [MIT](LICENSE)。93 个固定来源文件及 SHA-256 见 [vendor/SOURCES.json](vendor/SOURCES.json)，许可文本见 licenses。
 
 - gateway-plugin-sdk：CPR v3.35.1 的公开 SDK，Apache-2.0；展开 workspace 元数据并移除开发依赖。使用协议 7、management v2、maintenance v1，兼容性以真实宿主测试为准。
-- LM Fingerprint Detector：vendored Rust SDK 0.2.0，MIT，仅本地加载和评分。
-- Candy Eval：原题和配套检测资源固定在 a4ef212df06817e8071acd05f00219f4c9eb2f9a；数据 built_at 为 2026-10-27T05:02:50.758637+00:00。
-- codex-proxy-ui v0.12.0：Apache-2.0，组件和样式编入包内并消费宿主主题；仅独立预览初始化默认主题。Vue 为 MIT，DOMPurify 选用 Apache-2.0。
+- LM Fingerprint Detector Rust SDK 0.2.0，固定 6.2 序列检查修订 `33fb43f`，MIT，仅本地加载和评分。 [上游修订](https://github.com/Ikaleio/lm-detector/commit/33fb43f26670be0ed7817ab13e5c4c4731ccb76a)
+- 指纹参考数据固定至 `97180b3`，共 76 个候选，built_at 为 `2026-11-23T06:25:02.164646+00:00`。 [上游快照](https://github.com/Ikaleio/lm-detector/commit/97180b3b5da7069930c5244c758aa004f183b231)
+- codex-proxy-ui v0.13.1，Apache-2.0，组件和样式编入包内并消费宿主主题。Vue 为 MIT，DOMPurify 选用 Apache-2.0。
 - Markdown 的 Marked、marked-alert 与公式渲染 KaTeX 0.19.1 均为 MIT，许可证随归档提供。KaTeX 禁用受信任扩展，并限制宏展开和尺寸；仅输出浏览器原生 MathML。
 - Inter Variable 与 JetBrains Mono Variable 5.3.0：OFL-1.1，字体及许可证随包提供，不依赖外部字体请求。

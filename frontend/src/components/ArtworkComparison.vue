@@ -4,7 +4,7 @@ import { ZButton, ZCard, ZTag } from '@codex-proxy/ui'
 import HostDialog from './HostDialog.vue'
 import type { Workspace } from '../workspace'
 import { artwork } from '../media'
-import { profiles } from '../presentation'
+import { drawingVersions, profiles } from '../presentation'
 const props = defineProps<{ w: Workspace }>()
 const replacing = computed({ get: () => !!props.w.comparisonCandidate, set: (open) => { if (!open) props.w.comparisonCandidate = null } })
 const differing = computed(() => props.w.comparison.length === 2 && ['model', 'effort', 'requestProfile', 'outputVersion'].some((key) => {
@@ -21,7 +21,7 @@ const differing = computed(() => props.w.comparison.length === 2 && ['model', 'e
       <ZCard v-for="(r, i) in w.comparison" :key="r.id" padding="compact">
         <div class="aside-heading"><ZTag type="primary">对比 {{ i === 0 ? 'A' : 'B' }}</ZTag><ZButton size="small" variant="text" :aria-label="'移除对比 ' + (i === 0 ? 'A' : 'B')" @click="w.comparison.splice(i, 1)">移除</ZButton></div>
         <img :src="artwork(r).url" alt="对比中的鹈鹕作品" />
-        <p><strong>{{ w.recordLabel(r) }}</strong></p><p class="muted">{{ r.model }} · {{ r.effort || '默认强度' }} · {{ profiles[r.requestProfile ?? 'simple-v1'] }} · {{ r.outputVersion ?? '旧版题目' }}</p><p class="muted">{{ new Date(r.startedAt).toLocaleString() }}</p>
+        <p><strong>{{ w.recordLabel(r) }}</strong></p><p class="muted">{{ r.model }} · {{ r.effort || '默认强度' }} · {{ profiles[r.requestProfile ?? 'simple-v1'] }} · {{ drawingVersions[r.outputVersion ?? ''] ?? '旧版绘图题' }}</p><p class="muted">{{ new Date(r.startedAt).toLocaleString() }}</p>
       </ZCard>
     </div>
   </section>

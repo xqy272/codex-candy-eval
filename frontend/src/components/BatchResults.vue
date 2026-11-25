@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { ZButton, ZCard, ZTable, ZTag, type TableColumn } from '@codex-proxy/ui'
 import type { Workspace } from '../workspace'
-import { active, duration, executionState, label, phases, recordTone } from '../presentation'
+import { active, drawingVersions, duration, executionState, label, phases, recordTone } from '../presentation'
 import { artwork } from '../media'
 const props = defineProps<{ w: Workspace }>()
 const emit = defineEmits<{ open: [id: string] }>()
@@ -63,7 +63,7 @@ const rows = computed(() => props.w.batchAccounts.map((id) => {
     }
   } else if (kind === 'pelican' && current) {
     result = current.status === 'completed' ? '作品已生成' : live ? '等待完整作品' : '未取得完整作品'
-    detail = current.outputVersion === 'svg-v1' ? '标准 SVG' : '旧版绘图题'
+    detail = drawingVersions[current.outputVersion ?? ''] ?? '旧版绘图题'
   }
   if (missing && batch.ready) detail = [detail, '缺少 ' + missing + ' 份记录'].filter(Boolean).join(' · ')
   return { id, name: records[0] ? props.w.recordLabel(records[0]) : props.w.accountLabel(id),

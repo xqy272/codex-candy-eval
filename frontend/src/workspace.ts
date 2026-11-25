@@ -11,6 +11,11 @@ import {
   type QueueCapacity,
 } from './api'
 import { accountDisplayName, active, executionState, label, verdict } from './presentation'
+
+const efforts = ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+const draftOutputVersion = (kind: string, version = 'svg-v1') =>
+  kind === 'pelican' && version === 'svg-v1' ? 'svg-v2' : version
+
 export function workspace() {
   const nav = ref<'test' | 'history'>('test'),
     kind = ref('fingerprint'),
@@ -135,7 +140,7 @@ export function workspace() {
     effort.value = saved.effort
     profile.value = saved.profile
     repeats.value = saved.repeats
-    outputVersion.value = saved.outputVersion
+    outputVersion.value = draftOutputVersion(saved.kind, saved.outputVersion)
     lastSaved = JSON.stringify(saved)
   }
   const currentBatch = computed(() =>
@@ -187,6 +192,12 @@ export function workspace() {
   )
   const requiredTasks = computed(() => selected.value.length * (kind.value === 'candy' ? repeats.value : 1))
   const queueExceeded = computed(() => !!queueCapacity.value && requiredTasks.value > queueCapacity.value.available)
+  const effortOptions = computed(() => {
+    const gpt62 = model.value === 'gpt-6.2-astra' || model.value === 'gpt-6.2-sol'
+    return efforts
+      .filter((value) => !gpt62 || (value !== 'none' && value !== 'minimal'))
+      .map((value) => ({ label: value || '默认', value }))
+  })
   const readinessReason = computed(() => {
     if (isPreview) return '请从 CPR 插件入口打开'
     if (loading.value) return '正在读取账号与配置'
@@ -196,6 +207,8 @@ export function workspace() {
     if (!keyId.value) return keys.value.length ? '请选择客户端 Key' : '暂无可用客户端 Key'
     if (modelLoading.value) return '正在读取模型'
     if (!model.value) return models.value.length ? '请选择模型' : '所选 Key 暂无可用模型'
+    if (!effortOptions.value.some(({ value }) => value === effort.value))
+      return '当前推理强度与所选模型不兼容，请重新选择'
     if (!selected.value.length) return '请选择至少一个可用账号'
     if (selected.value.length > 16) return '每批次最多选择 16 个账号'
     if (!queueCapacity.value) return '尚未取得队列余量，请重新读取'
@@ -425,7 +438,7 @@ export function workspace() {
     effort.value = d?.effort ?? ''
     profile.value = d?.profile ?? 'simple-v1'
     repeats.value = d?.repeats ?? 1
-    outputVersion.value = d?.outputVersion ?? 'svg-v1'
+    outputVersion.value = draftOutputVersion(next, d?.outputVersion)
     currentBatchId.value = d?.batchId ?? ''
     focus.value = d?.focus ?? ''
     detailOpen.value = false
@@ -634,6 +647,7 @@ export function workspace() {
     model,
     keyId,
     effort,
+    effortOptions,
     profile,
     repeats,
     outputVersion,

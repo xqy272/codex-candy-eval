@@ -4,6 +4,7 @@ use crate::{
     history,
     jobs::BatchRequest,
     management::AppState,
+    prompts::valid_output_version,
 };
 use gateway_plugin_sdk::{
     ErrorCode, PluginFault,
@@ -53,7 +54,7 @@ fn fields(kind: &str, effort: &str, profile: &str, repeats: usize, output: &str)
         && valid_profile(kind, profile)
         && (kind != "ciallo" || repeats == 1)
         && [1, 3, 5].contains(&repeats)
-        && matches!(output, "svg-v1" | "legacy-animation-v1")
+        && valid_output_version(output)
         && matches!(
             effort,
             "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"

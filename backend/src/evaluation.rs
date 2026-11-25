@@ -38,6 +38,16 @@ pub fn valid_profile(kind: &str, profile: &str) -> bool {
     profile == "simple-v1" || (kind != "ciallo" && profile == "codex-context-v1")
 }
 
+pub fn validate_model_effort(model: &str, effort: &str) -> Result<(), PluginFault> {
+    if matches!(model, "gpt-6.2-astra" | "gpt-6.2-sol") && matches!(effort, "none" | "minimal") {
+        return Err(PluginFault::new(
+            ErrorCode::InvalidInput,
+            "GPT-6.2 不支持 none 或 minimal，请选择默认或 low 及以上",
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RunRequest {
@@ -163,18 +173,20 @@ pub async fn ask_observed(
         return Err((None, "cancelled"));
     }
     let mut body = json!({"model":req.model,"input":[{"role":"user","content":p.prompt}],"stream":true,"store":false,"tools":[],"tool_choice":"none"});
-    if req.kind != "ciallo" {
+    let classic_pelican = req.kind == "pelican" && p.instructions.is_empty();
+    if req.kind != "ciallo" && !classic_pelican {
         body["instructions"] = json!(p.instructions);
     }
     if req.profile == "codex-context-v1" {
         let context: Value =
             serde_json::from_slice(include_bytes!("../../data/codex-context.json"))
                 .map_err(|_| (None, "invalid_request"))?;
-        body["instructions"] = json!(format!(
-            "{}\n\n{}",
-            context["base_instructions"].as_str().unwrap_or_default(),
-            p.instructions
-        ));
+        let base = context["base_instructions"].as_str().unwrap_or_default();
+        body["instructions"] = if classic_pelican {
+            json!(base)
+        } else {
+            json!(format!("{base}\n\n{}", p.instructions))
+        };
         let mut input = Vec::new();
         for message in context["messages"]
             .as_array()
@@ -382,14 +394,22 @@ pub async fn run(
                 history::append(&call.host, record.clone()).await?;
                 return Ok(json!({"record":record,"persisted":true,"nextStep":Value::Null}));
             }
+            if req.kind == "fingerprint"
+                && record["detectorRevision"] != crate::jobs::source()?["detectorRevision"]
+            {
+                return Err(PluginFault::new(
+                    ErrorCode::Conflict,
+                    "检测器或参考资源已变化，请新建检测",
+                ));
+            }
             record
         }
         None => {
             if req.step != 0 {
                 return Err(conflict());
             }
-            let source: Value = serde_json::from_slice(include_bytes!("../../vendor/SOURCES.json"))
-                .map_err(|_| history::invalid())?;
+            validate_model_effort(&req.model, &req.effort)?;
+            let source = crate::jobs::source()?;
             json!({"id":req.id,"accountId":req.account_id,"actualAccountId":Value::Null,"clientKeyId":req.client_key_id,"model":req.model,"effort":req.effort,"kind":req.kind,"status":"partial","startedAt":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"durationMs":0,"samples":[],"remaining":plan(&req.kind)?,"pendingStep":Value::Null,"expectedSamples":if req.kind=="fingerprint"{3}else{1},"attribution":Value::Null,"detectorVersion":state.detector.built_at(),"detectorRevision":source["detectorRevision"],"requestContextSha256":if req.profile=="codex-context-v1" {source["files"]["data/codex-context.json"].clone()} else {Value::Null},"requestProfile":req.profile,"gradingAnswer":if req.kind=="candy"{Some(21)}else{None},"pluginVersion":env!("CARGO_PKG_VERSION"),"upstreamAttempts":Value::Null})
         }
     };

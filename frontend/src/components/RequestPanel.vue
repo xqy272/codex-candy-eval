@@ -2,11 +2,10 @@
 import { computed } from 'vue'
 import { ZButton, ZCard, ZFormItem, ZPopover, ZSelect } from '@codex-proxy/ui'
 import type { Workspace } from '../workspace'
-import { profiles } from '../presentation'
+import { drawingVersions, profiles } from '../presentation'
 defineProps<{ w: Workspace }>()
-const efforts = ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
-  .map((value) => ({ label: value || '默认', value }))
 const profileOptions = computed(() => Object.entries(profiles).map(([value, label]) => ({ value, label })))
+const drawingOptions = ['svg-v2', 'legacy-animation-v1'].map((value) => ({ value, label: drawingVersions[value] }))
 </script>
 <template>
   <ZCard padding="compact" class="request-panel" aria-label="下一次检测配置">
@@ -17,7 +16,7 @@ const profileOptions = computed(() => Object.entries(profiles).map(([value, labe
           :loading="w.modelLoading" :disabled="w.busy || w.modelLoading" filterable />
       </ZFormItem>
       <ZFormItem label="推理强度">
-        <ZSelect v-model="w.effort" aria-label="推理强度" :options="efforts" :disabled="w.busy" />
+        <ZSelect v-model="w.effort" aria-label="推理强度" :options="w.effortOptions" :disabled="w.busy" />
       </ZFormItem>
       <ZFormItem v-if="w.kind === 'ciallo'" label="固定消息"><code class="fixed-message">ciallo</code></ZFormItem>
       <ZFormItem v-else label="请求语境">
@@ -34,7 +33,7 @@ const profileOptions = computed(() => Object.entries(profiles).map(([value, labe
       </ZFormItem>
       <ZFormItem v-if="w.kind === 'pelican'" label="绘图题目">
         <ZSelect v-model="w.outputVersion" aria-label="绘图题目"
-          :options="[{ label: '标准 SVG v1', value: 'svg-v1' }, { label: '旧版 HTML 动画题', value: 'legacy-animation-v1' }]"
+          :options="drawingOptions"
           :disabled="w.busy" />
       </ZFormItem>
     </div>

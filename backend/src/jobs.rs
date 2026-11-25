@@ -137,10 +137,7 @@ pub async fn submit_batch(
         || !(1..=4).contains(&req.concurrency)
         || ![1, 3, 5].contains(&req.repeats)
         || (req.kind != "candy" && req.repeats != 1)
-        || !matches!(
-            req.output_version.as_str(),
-            "svg-v1" | "legacy-animation-v1"
-        )
+        || !prompts::valid_output_version(&req.output_version)
         || req
             .account_ids
             .iter()
@@ -161,6 +158,7 @@ pub async fn submit_batch(
         }
         b
     } else {
+        evaluation::validate_model_effort(&req.model, &req.effort)?;
         let task_count = req.account_ids.len() * req.repeats;
         let rows = index(host).await?.0;
         if pending_count(&rows) + task_count > MAX_PENDING {
@@ -537,12 +535,22 @@ async fn runtime(host: &HostClient, id: &str) -> Result<AuthRuntimeAccount, Plug
     .await?;
     serde_json::from_slice(&payload).map_err(|_| history::invalid())
 }
-fn source() -> Result<Value, PluginFault> {
+pub(crate) fn source() -> Result<Value, PluginFault> {
     serde_json::from_slice(include_bytes!("../../vendor/SOURCES.json"))
         .map_err(|_| history::invalid())
 }
 fn hashes(s: &Value) -> Value {
-    json!({"suite":s["files"]["data/enrollment-suite.json"],"bank":s["files"]["data/unified_bank.json"],"context":s["files"]["data/codex-context.json"],"algorithm":"lmfpd-0.2.0/strict-three-v1"})
+    json!({"suite":s["files"]["data/enrollment-suite.json"],"bank":s["files"]["data/unified_bank.json"],"context":s["files"]["data/codex-context.json"],"algorithm":"lmfpd-0.2.0/strict-three-v2"})
+}
+fn baseline_matches(job: &Job, source: &Value) -> bool {
+    let current = hashes(source);
+    (job.request.kind != "fingerprint"
+        || (job.detector_revision == source["detectorRevision"]
+            && ["suite", "bank", "algorithm"]
+                .into_iter()
+                .all(|key| job.source_hashes[key] == current[key])))
+        && (job.request.profile != "codex-context-v1"
+            || job.source_hashes["context"] == current["context"])
 }
 fn same_account(job: &Job, a: &AuthRuntimeAccount) -> bool {
     Identity::from(a) == job.identity
@@ -622,6 +630,7 @@ pub async fn submit(
         save(host, &job).await?;
         return Ok(json!({"record":job.record(),"duplicate":true}));
     }
+    evaluation::validate_model_effort(&req.model, &req.effort)?;
     if pending_count(&index(host).await?.0) >= MAX_PENDING {
         return Err(PluginFault::new(
             ErrorCode::Capacity,
@@ -646,8 +655,16 @@ async fn new_job(
     }
     let src = source()?;
     let mut plan = evaluation::plan(&req.kind)?;
-    if req.kind == "pelican" && output_version.as_deref() == Some("svg-v1") {
-        plan[0].prompt="Draw a pelican riding a bicycle as a complete standalone SVG. Output only the SVG, without Markdown, HTML, JavaScript, external assets, or explanatory text.".into();
+    if req.kind == "pelican" {
+        let prompt = match output_version.as_deref() {
+            Some("svg-v2") => {
+                plan[0].instructions.clear();
+                prompts::PELICAN_SVG_V2
+            }
+            Some("svg-v1") => prompts::PELICAN_SVG_V1,
+            _ => prompts::PELICAN,
+        };
+        plan[0].prompt = prompt.into();
     }
     Ok(Job {
         request: req,
@@ -796,8 +813,7 @@ pub async fn action(
                 ));
             }
             let src = source()?;
-            if job.detector_revision != src["detectorRevision"] || job.source_hashes != hashes(&src)
-            {
+            if !baseline_matches(&job, &src) {
                 return Err(conflict("检测器或参考资源已变化，请新建检测"));
             }
             let account = runtime(host, &job.request.account_id).await?;
@@ -1092,7 +1108,7 @@ async fn select_next(
             continue;
         }
         let src = source()?;
-        if job.detector_revision != src["detectorRevision"] || job.source_hashes != hashes(&src) {
+        if !baseline_matches(&job, &src) {
             job.status = "paused".into();
             job.reason = Some("baseline_changed".into());
             save(host, &job).await?;

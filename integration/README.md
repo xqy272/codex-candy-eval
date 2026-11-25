@@ -1,3 +1,21 @@
+# 1.4.6 指纹更新、经典鹈鹕与 CPR 3.54.5
+
+使用下方的隔离宿主流程。以已校验的官方 CPR 3.53.1 启动，注册 3.54.5 为唯一 `--matrix-cpr-dir`，准备已发布 1.4.5 和最终 1.4.6 两份归档。依次执行：
+
+```bash
+python3 integration/native_client.py --baseline dist/cloudops.codex-candy-eval-1.4.5-x86_64-unknown-linux-gnu.tar.gz
+python3 integration/model-update.py seed
+python3 integration/model-update.py upgrade
+python3 integration/model-update.py business
+node integration/model-update-browser.mjs
+```
+
+`seed` 保存旧 SVG 题面、草稿和两条未完成记录。`upgrade` 在原实例换包，核对状态逐项相同，旧指纹跨库补测返回冲突，旧 Ciallo 仅在明确重试后增加一次受控尝试。`business` 将同一数据库切换到 CPR 3.54.5，检查两种 GPT-6.2 名称、推理强度线协议、三样本评分、原题和 Ciallo。浏览器在原生 iframe 核对新版草稿、旧报告版本、两只本地 SVG 复用车轮和 390px 页面，查看操作对照账本。所有模型调用指向回环夹具。
+
+验收报告位于 `.runtime/integration/model-update-native.json` 和 `model-update-browser.json`。下方清理流程适用于本次临时环境。
+
+---
+
 # 1.4.5 暂停记录释放队列与原实例升级
 
 使用官方 CPR 3.53.1 创建下方说明的全新临时数据库和受控上游，不注册宿主切换目标。准备已发布的 1.4.4 和最终 1.4.5 归档，按顺序执行：

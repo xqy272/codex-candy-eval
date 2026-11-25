@@ -1,5 +1,5 @@
 {
-  "snapshot_date": "2026-10-31",
+  "snapshot_date": "2026-11-25",
   "gateway_plugin_sdk": {
     "repository": "https://github.com/zyycn/codex-proxy-rs",
     "ref": "v3.35.1",
@@ -10,29 +10,48 @@
   },
   "lmfpd": {
     "repository": "https://github.com/Ikaleio/lm-detector",
-    "ref": "main snapshot, vendored bytes fixed below",
+    "ref": "33fb43f26670be0ed7817ab13e5c4c4731ccb76a",
     "version": "0.2.0",
     "path": "sdk/rust",
     "modifications": []
   },
   "fingerprint_data": {
-    "repository": "https://github.com/haowang02/cpa-plugin-codex-candy-eval",
-    "path": "internal/plugin/data/lm-detector",
-    "upstream_commit": "a4ef212df06817e8071acd05f00219f4c9eb2f9a",
-    "built_at": "2026-10-27T05:02:50.758637+00:00"
+    "repository": "https://github.com/Ikaleio/lm-detector",
+    "path": "data",
+    "upstream_commit": "97180b3b5da7069930c5244c758aa004f183b231",
+    "built_at": "2026-11-23T06:25:02.164646+00:00",
+    "upstream_bank_sha256": "06397f4ed64911abab9f3b05843f5e87fc92057040aa9aa43bc6f16eb242b1aa",
+    "bank_adaptation": "Retain built_at and ordered model id, display_name, family, family_name and response_count fields used by the Rust SDK."
   },
   "conformance_fixture": {
     "repository": "https://github.com/Ikaleio/lm-detector",
     "path": "sdk/conformance/analyze.json",
-    "case": "scored-claude-haiku-4.5 outputs only"
+    "case": "scored-claude-haiku-4.5 outputs only",
+    "ref": "33fb43f26670be0ed7817ab13e5c4c4731ccb76a",
+    "gpt_6_2": {
+      "ref": "f359c495297466ef9719462597a780c6fda4842a",
+      "paths": [
+        "data/collections/gpt-6.2-sol-openrouter-openai-low-20261118/result.json",
+        "data/collections/gpt-6.2-astra-openrouter-openai-low-20261118/result.json"
+      ],
+      "challenge_ids": [
+        "query-01",
+        "query-13",
+        "query-25"
+      ],
+      "fields": [
+        "text",
+        "expected_count"
+      ]
+    }
   },
-  "detectorRevision": "sha256:9ac93e5e580f5bac887f97a20bfae15d0a3ad08c6372e4b3552fce6708078a80",
+  "detectorRevision": "sha256:5ce8f55a6bed741c3ef2c3d9929832df949639d249834aabea168773136fd9e2",
   "files": {
     "backend/tests/fixtures/fingerprint.json": "acb832fedf48d517aafef46fa6cdb19cdffd0c503d5000d3cb2013273f2207ec",
     "data/enrollment-suite.json": "18ccae737392254cbe3bc274a01d5adc8f896a64e79d2bacac0d3ac1444f40c9",
     "data/LICENSE": "238afb57e498990742f84b9ce6167b4e256ac06104a9938ce953bc41c14bea51",
-    "data/shared_detector.bin": "9ac93e5e580f5bac887f97a20bfae15d0a3ad08c6372e4b3552fce6708078a80",
-    "data/unified_bank.json": "7ed636d426ce9fe3a8f0630eb90f6afa0a60033e9c6041c586471c7fc49a9d0c",
+    "data/shared_detector.bin": "5ce8f55a6bed741c3ef2c3d9929832df949639d249834aabea168773136fd9e2",
+    "data/unified_bank.json": "d24152a6451b0347776f00fe6665ff1c5fadd6b491a0f1638d418846396a0ec6",
     "vendor/gateway-plugin-sdk/Cargo.toml": "30e38d35eefaca70ac52176b6e6b4530ed2d410f805d76a792e4e9a04892cd19",
     "vendor/gateway-plugin-sdk/LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
     "vendor/gateway-plugin-sdk/src/budget.rs": "c88bd353931889a067e088e69cac4b7f08300d968db20b50d6e455c1b1501f83",
@@ -115,11 +134,12 @@
     "vendor/lmfpd/src/error.rs": "10ad6c12c00b0cd1ba496246e04fd96ff1e2233466bbf26758a701ea5fa1cf97",
     "vendor/lmfpd/src/features.rs": "fc18df162c30029a5b3bbeb03b0974988efc7b9a8a745a7372878e2846ea72d4",
     "vendor/lmfpd/src/lib.rs": "c69c6d148c54317dc686bad996138344966536bee48b36506134d63c9890a293",
-    "vendor/lmfpd/src/ranker.rs": "d23f246f65d571d27e000187081a8adef18f35e48519963ed2d9226fb87f0c6a",
+    "vendor/lmfpd/src/ranker.rs": "485b2fe223b8083d070fff4487ac2f4a0a9f87306ab4e2b4190dd0e2441f91e4",
     "vendor/lmfpd/src/request.rs": "91c6899d037c14a47818aa37bd514274b11b8ded16e005a0660b5493a78104d1",
     "vendor/lmfpd/src/sample.rs": "34a7f0092fafc7af9afb4a1ed54cde80021790c7f21161a9f8adf62c4b3f089a",
     "vendor/lmfpd/src/templates.json": "b3af91a3f889a534638308221cc3db3cada36f68395fdc75ed71a9571ac2c5df",
-    "data/codex-context.json": "65f976b3a7cb410e50312e5b4096686e5b1fda3e4fa1942ee3974d7cb1e7cd42"
+    "data/codex-context.json": "65f976b3a7cb410e50312e5b4096686e5b1fda3e4fa1942ee3974d7cb1e7cd42",
+    "backend/tests/fixtures/fingerprint-gpt-6.2.json": "d34527fb78bb1a92fe2c8e1a943e232574575290bbaa1a38c1d9555c9c8c4ee7"
   },
   "requestContext": {
     "repository": "https://github.com/haowang02/cpa-plugin-codex-candy-eval",

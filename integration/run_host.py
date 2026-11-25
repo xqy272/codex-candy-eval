@@ -73,13 +73,13 @@ class Mock(http.server.BaseHTTPRequestHandler):
                 self.observation["end"]=time.monotonic();type(self).active-=1;self.per_account[alias]-=1
     def log_message(self,*args):pass
     def do_GET(self):
-        data=json.dumps({'object':'list','data':[{'id':n,'object':'model','owned_by':'fixture'}for n in ['eval-candy','eval-ciallo','eval-ciallo-incomplete','eval-markdown','eval-fp','eval-pelican','eval-pelican-slow','eval-pelican-resume','eval-error','eval-incomplete','eval-slow','eval-large','eval-batch','eval-partial']]}).encode()
+        data=json.dumps({'object':'list','data':[{'id':n,'object':'model','owned_by':'fixture'}for n in ['eval-candy','eval-ciallo','eval-ciallo-incomplete','eval-markdown','eval-fp','eval-pelican','eval-pelican-slow','eval-pelican-resume','eval-pelican-wrapped','eval-error','eval-incomplete','eval-slow','eval-large','eval-batch','eval-partial','gpt-6.2-sol','gpt-6.2-astra']]}).encode()
         self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',len(data));self.end_headers();self.wfile.write(data)
     def respond(self):
         body=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))))
         model=body.get('model','')
         with self.lock:
-            self.observation.update({'model':model,'body':body});self.calls.append(self.observation);index=len(self.calls)
+            self.observation.update({'model':model,'body':body,'effort':(body.get('reasoning') or {}).get('effort')});self.calls.append(self.observation);index=len(self.calls)
             same_model_count=sum(c['model']==model for c in self.calls)
         if model=='eval-error':
             data=json.dumps({'error':{'message':'Isolated fixture failure','type':'invalid_request_error','code':'fixture_error'}}).encode()
@@ -91,6 +91,12 @@ class Mock(http.server.BaseHTTPRequestHandler):
             self.observation['plainCiallo']=plain and not body.get('instructions') and not body.get('tools')
             text='Partial Ciallo fixture.' if model=='eval-ciallo-incomplete' else 'Hello from the Ciallo fixture.'
         if model in ['eval-pelican','eval-pelican-slow','eval-pelican-resume']:text='```html\n<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><rect width="360" height="200" fill="#eef5ff"/><circle cx="90" cy="150" r="30" fill="none" stroke="#246"/><circle cx="240" cy="150" r="30" fill="none" stroke="#246"/><text x="90" y="70">Pelican test fixture</text></svg>\n```'
+        if model == 'eval-pelican-wrapped':
+            text = ('Here is the drawing.\n```html\n<html><body><svg viewBox="0 0 240 120">'
+                    '<defs><circle id="wheel" r="30" fill="none" stroke="#246"/></defs>'
+                    '<use href="#wheel" x="45" y="80"/><use href="#wheel" x="195" y="80"/>'
+                    '<text x="65" y="40">Pelican test fixture</text>'
+                    '</svg></body></html>\n```\nRendered as an illustration.')
         if model in ['eval-fp','eval-partial']:
             fixtures=json.loads((ROOT/'backend/tests/fixtures/fingerprint.json').read_text())
             content=json.dumps(body,ensure_ascii=False)

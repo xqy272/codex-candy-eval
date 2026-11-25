@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { ZButton, ZTag, ZTextarea } from '@codex-proxy/ui'
 import type { RecordEntry } from '../api'
-import { active, duration, label, phases, profiles, reasons, recordTone } from '../presentation'
+import { active, drawingVersions, duration, label, phases, profiles, reasons, recordTone } from '../presentation'
 import { download } from '../media'
 import ArtworkView from './ArtworkView.vue'
 import AnswerBody from './AnswerBody.vue'
@@ -139,7 +139,7 @@ function exportSummary() {
           <div><dt>推理强度</dt><dd>{{ current.effort || '默认强度' }}</dd></div>
           <div><dt>请求语境</dt><dd>{{ profiles[current.requestProfile ?? 'simple-v1'] ?? current.requestProfile }}</dd></div>
           <div><dt>客户端 Key</dt><dd>{{ clientKey || '旧版未记录' }}</dd></div>
-          <div v-if="current.kind === 'pelican'"><dt>绘图题目</dt><dd>{{ current.outputVersion === 'svg-v1' ? '标准 SVG v1' : '旧版绘图题' }}</dd></div>
+          <div v-if="current.kind === 'pelican'"><dt>绘图题目</dt><dd>{{ drawingVersions[current.outputVersion ?? ''] ?? '旧版绘图题' }}</dd></div>
         </dl>
         <dl class="request-facts request-totals">
           <div><dt>{{ cumulative ? '累计耗时' : '请求耗时' }}</dt><dd>{{ elapsed }}</dd></div>

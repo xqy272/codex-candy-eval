@@ -26,6 +26,11 @@ export const profiles: Record<string, string> = {
   'simple-v1': '简洁请求',
   'codex-context-v1': 'Codex 上下文 v1',
 }
+export const drawingVersions: Record<string, string> = {
+  'svg-v2': '经典 SVG（原题）',
+  'svg-v1': '标准 SVG v1',
+  'legacy-animation-v1': '旧版 HTML 动画题',
+}
 export const reasons: Record<string, string> = {
   uncertain: '上次请求的结果无法确认，未自动重发。继续检测可能再次消耗额度。',
   invalid_sample: '响应已完整结束，但数字样本未通过算法校验。已有有效样本保留。',
